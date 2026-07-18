@@ -24,11 +24,16 @@
 var SHEETS = {
   members: {
     name: 'members',
-    headers: ['id', 'name', 'rank', 'group', 'active'],
+    // grade / dorm は既存データの列位置を崩さないよう末尾に追加
+    headers: ['id', 'name', 'rank', 'group', 'active', 'grade', 'dorm'],
   },
   meal_logs: {
     name: 'meal_logs',
     headers: ['date', 'member_id', 'breakfast', 'dinner'],
+  },
+  guest_meals: {
+    name: 'guest_meals',
+    headers: ['date', 'name', 'breakfast', 'dinner'],
   },
   monthly_expenses: {
     name: 'monthly_expenses',
@@ -114,7 +119,12 @@ function handleRequest(e, method) {
         data = saveMembers(params.members);
         break;
       case 'saveMealLogs':
-        data = saveMealLogs(params.year_month, params.logs);
+        data = saveMealLogs(
+          params.year_month,
+          params.logs,
+          params.guests,
+          params.date
+        );
         break;
       case 'saveExpenses':
         data = saveExpenses(
@@ -154,6 +164,7 @@ function getInitialData(yearMonth) {
   var members = readMembers_();
   var config = readConfig_();
   var mealLogs = readMealLogs_(yearMonth);
+  var guestMeals = readGuestMeals_(yearMonth);
   var expenses = readExpenses_(yearMonth);
   var tournamentItems = readTournamentItems_(yearMonth);
   var campItems = readCampItems_(yearMonth);
@@ -161,6 +172,7 @@ function getInitialData(yearMonth) {
     members: members,
     config: config,
     mealLogs: mealLogs,
+    guestMeals: guestMeals,
     expenses: expenses,
     tournamentItems: tournamentItems,
     campItems: campItems,
@@ -181,6 +193,8 @@ function saveMembers(members) {
         String(m.rank || ''),
         String(m.group || ''),
         toBool_(m.active),
+        String(m.grade || ''),
+        String(m.dorm || ''),
       ];
     });
     // ループ内 setValue を避け setValues で一括書き込み
@@ -189,10 +203,11 @@ function saveMembers(members) {
   return { saved: members.length };
 }
 
-// 食数ログ UPSERT（key: date + member_id）
-function saveMealLogs(yearMonth, logs) {
+// 食数ログ UPSERT（key: date + member_id）+ 見学高校生（当日分を総入れ替え）
+function saveMealLogs(yearMonth, logs, guests, date) {
   ensureSheets_();
   logs = logs || [];
+  guests = guests || [];
   var sheet = getSheet_(SHEETS.meal_logs.name);
   var values = getBody_(sheet); // [date, member_id, breakfast, dinner]
 
@@ -225,7 +240,48 @@ function saveMealLogs(yearMonth, logs) {
   if (out.length) {
     sheet.getRange(2, 1, out.length, SHEETS.meal_logs.headers.length).setValues(out);
   }
-  return { saved: logs.length, total: out.length };
+
+  // 見学高校生：当日分を総入れ替え（date 指定時のみ）
+  if (date) {
+    saveGuestMeals_(normDate_(date), guests);
+  }
+
+  return { saved: logs.length, total: out.length, guests: guests.length };
+}
+
+// 見学高校生の食数を「指定日分だけ」入れ替える
+function saveGuestMeals_(date, guests) {
+  var sheet = getSheet_(SHEETS.guest_meals.name);
+  var headers = SHEETS.guest_meals.headers;
+  var values = getBody_(sheet);
+
+  // 他の日の行は温存
+  var kept = [];
+  for (var i = 0; i < values.length; i++) {
+    var row = values[i];
+    if (row[0] === '' && row[1] === '') continue;
+    if (normDate_(row[0]) === date) continue; // 当日は破棄
+    kept.push([normDate_(row[0]), String(row[1]), toBool_(row[2]), toBool_(row[3])]);
+  }
+
+  // 名前ありのみ追加
+  var newRows = [];
+  for (var g = 0; g < guests.length; g++) {
+    var name = String(guests[g].name || '').trim();
+    if (name === '') continue;
+    newRows.push([
+      date,
+      name,
+      toBool_(guests[g].breakfast),
+      toBool_(guests[g].dinner),
+    ]);
+  }
+
+  var outAll = kept.concat(newRows);
+  clearBody_(sheet);
+  if (outAll.length) {
+    sheet.getRange(2, 1, outAll.length, headers.length).setValues(outAll);
+  }
 }
 
 // 月次経費 UPSERT（key: year_month + member_id）
@@ -350,6 +406,27 @@ function readMembers_() {
       rank: String(r[2]),
       group: String(r[3]),
       active: toBool_(r[4]),
+      grade: r[5] != null ? String(r[5]) : '',
+      dorm: r[6] != null ? String(r[6]) : '',
+    });
+  }
+  return out;
+}
+
+function readGuestMeals_(yearMonth) {
+  var sheet = getSheet_(SHEETS.guest_meals.name);
+  var values = getBody_(sheet);
+  var out = [];
+  for (var i = 0; i < values.length; i++) {
+    var r = values[i];
+    if (r[0] === '' && r[1] === '') continue;
+    var date = normDate_(r[0]);
+    if (yearMonth && date.indexOf(yearMonth) !== 0) continue;
+    out.push({
+      date: date,
+      name: String(r[1]),
+      breakfast: toBool_(r[2]),
+      dinner: toBool_(r[3]),
     });
   }
   return out;

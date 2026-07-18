@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Plus, Trash2, Save, UserPlus, RotateCcw } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
-import { RANKS, GROUPS } from '../lib/constants.js'
+import { RANKS, GROUPS, GRADES, DORMS } from '../lib/constants.js'
 import {
   Button,
   Card,
@@ -42,7 +42,9 @@ export default function MembersScreen() {
         id: nextId,
         name: '',
         rank: RANKS[0],
+        grade: GRADES[0],
         group: GROUPS[0],
+        dorm: DORMS[0],
         active: true,
       },
     ])
@@ -132,14 +134,16 @@ export default function MembersScreen() {
       <Card>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-sm">
+            <table className="w-full min-w-[900px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium text-slate-500">
                   <th className="w-14 px-4 py-3">ID</th>
                   <th className="px-4 py-3">氏名</th>
-                  <th className="w-40 px-4 py-3">チームランク</th>
-                  <th className="w-40 px-4 py-3">集金グループ</th>
-                  <th className="w-28 px-4 py-3">在籍</th>
+                  <th className="w-24 px-3 py-3">学年</th>
+                  <th className="w-36 px-3 py-3">チームランク</th>
+                  <th className="w-36 px-3 py-3">集金グループ</th>
+                  <th className="w-24 px-3 py-3">寮</th>
+                  <th className="w-24 px-4 py-3">在籍</th>
                   <th className="w-16 px-4 py-3"></th>
                 </tr>
               </thead>
@@ -162,7 +166,19 @@ export default function MembersScreen() {
                         onChange={(e) => update(r.id, 'name', e.target.value)}
                       />
                     </td>
-                    <td className="px-4 py-2">
+                    <td className="px-3 py-2">
+                      <Select
+                        value={r.grade || ''}
+                        onChange={(e) => update(r.id, 'grade', e.target.value)}
+                      >
+                        {GRADES.map((g) => (
+                          <option key={g} value={g}>
+                            {g}
+                          </option>
+                        ))}
+                      </Select>
+                    </td>
+                    <td className="px-3 py-2">
                       <Select
                         value={r.rank}
                         onChange={(e) => update(r.id, 'rank', e.target.value)}
@@ -174,7 +190,7 @@ export default function MembersScreen() {
                         ))}
                       </Select>
                     </td>
-                    <td className="px-4 py-2">
+                    <td className="px-3 py-2">
                       <Select
                         value={r.group}
                         onChange={(e) => update(r.id, 'group', e.target.value)}
@@ -182,6 +198,18 @@ export default function MembersScreen() {
                         {GROUPS.map((g) => (
                           <option key={g} value={g}>
                             {g}
+                          </option>
+                        ))}
+                      </Select>
+                    </td>
+                    <td className="px-3 py-2">
+                      <Select
+                        value={r.dorm || ''}
+                        onChange={(e) => update(r.id, 'dorm', e.target.value)}
+                      >
+                        {DORMS.map((d) => (
+                          <option key={d} value={d}>
+                            {d}
                           </option>
                         ))}
                       </Select>
@@ -214,7 +242,7 @@ export default function MembersScreen() {
                 {filtered.length === 0 && (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={8}
                       className="px-4 py-10 text-center text-sm text-muted-foreground"
                     >
                       該当するメンバーがいません

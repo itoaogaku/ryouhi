@@ -14,6 +14,12 @@ export const RANKS = [
 // 集金グループ（PDFの改ページ単位もこの順）
 export const GROUPS = ['1階3階', '2階', '2寮', '女子寮']
 
+// 学年
+export const GRADES = ['1年', '2年', '3年', '4年']
+
+// 所属寮
+export const DORMS = ['1寮', '2寮']
+
 // 合宿1泊単価のプリセット
 export const CAMP_PRICE_PRESETS = [
   { label: '2700円', value: 2700 },

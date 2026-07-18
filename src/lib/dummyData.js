@@ -1,4 +1,4 @@
-import { RANKS, GROUPS, DEFAULT_CONFIG } from './constants.js'
+import { RANKS, GROUPS, GRADES, DORMS, DEFAULT_CONFIG } from './constants.js'
 import { daysInMonth, toDateStr, toYearMonth } from './utils.js'
 
 // -------------------------------------------------------------
@@ -40,7 +40,9 @@ function generateMembers() {
       id,
       name: `${FAMILY_NAMES[i]} ${GIVEN_NAMES[i]}`,
       rank,
+      grade: GRADES[i % GRADES.length],
       group,
+      dorm: DORMS[i % DORMS.length],
       active: true,
     })
   }
@@ -76,6 +78,37 @@ function generateMealLogs(members, year, month) {
     }
   }
   return logs
+}
+
+const GUEST_NAMES = ['青葉高 田村', '青葉高 森田', '桜丘高 岡本', '桜丘高 西村']
+
+// 見学高校生の食数（一部の日にサンプルを生成）
+function generateGuestMeals(year, month) {
+  const guests = []
+  const totalDays = daysInMonth(year, month)
+  const today = new Date()
+  const isCurrentMonth =
+    year === today.getFullYear() && month === today.getMonth() + 1
+  const lastDay = isCurrentMonth ? today.getDate() : totalDays
+  // 数日おきに1〜2名が見学に来る想定
+  for (let d = 5; d <= lastDay; d += 7) {
+    const date = toDateStr(year, month, d)
+    guests.push({
+      date,
+      name: GUEST_NAMES[d % GUEST_NAMES.length],
+      breakfast: false,
+      dinner: true,
+    })
+    if (d % 2 === 0) {
+      guests.push({
+        date,
+        name: GUEST_NAMES[(d + 1) % GUEST_NAMES.length],
+        breakfast: true,
+        dinner: true,
+      })
+    }
+  }
+  return guests
 }
 
 // 指定年月分の月次経費（治療・佐川・ウエア）を生成
@@ -157,6 +190,7 @@ export function buildDummyInitialData(year, month) {
     members,
     config: { ...DEFAULT_CONFIG },
     mealLogs: generateMealLogs(members, year, month),
+    guestMeals: generateGuestMeals(year, month),
     expenses: generateExpenses(members, year, month),
     tournamentItems: generateTournamentItems(members, year, month),
     campItems: generateCampItems(members, year, month),

@@ -25,6 +25,7 @@ export function AppProvider({ children }) {
   const [members, setMembers] = useState([])
   const [config, setConfig] = useState(DEFAULT_CONFIG)
   const [mealLogs, setMealLogs] = useState([])
+  const [guestMeals, setGuestMeals] = useState([])
   const [expenses, setExpenses] = useState([])
   const [tournamentItems, setTournamentItems] = useState([])
   const [campItems, setCampItems] = useState([])
@@ -48,6 +49,7 @@ export function AppProvider({ children }) {
       setMembers(data.members || [])
       setConfig({ ...DEFAULT_CONFIG, ...(data.config || {}) })
       setMealLogs(data.mealLogs || [])
+      setGuestMeals(data.guestMeals || [])
       setExpenses(data.expenses || [])
       setTournamentItems(data.tournamentItems || [])
       setCampItems(data.campItems || [])
@@ -73,10 +75,11 @@ export function AppProvider({ children }) {
     [showToast]
   )
 
+  // logs: メンバー食数（当日分）, guests: 見学高校生（当日分）, date: 対象日
   const saveMealLogs = useCallback(
-    async (logs) => {
-      await api.saveMealLogs(yearMonth, logs)
-      // ローカル state を UPSERT 更新
+    async (logs, guests = [], date = null) => {
+      await api.saveMealLogs(yearMonth, logs, guests, date)
+      // メンバー食数を UPSERT 更新
       setMealLogs((prev) => {
         const key = (l) => `${l.date}__${l.member_id}`
         const map = new Map(prev.map((l) => [key(l), l]))
@@ -86,6 +89,21 @@ export function AppProvider({ children }) {
         }
         return Array.from(map.values())
       })
+      // 見学高校生は当日分を総入れ替え
+      if (date) {
+        const valid = guests
+          .filter((g) => (g.name || '').trim() !== '')
+          .map((g) => ({
+            date,
+            name: g.name.trim(),
+            breakfast: !!g.breakfast,
+            dinner: !!g.dinner,
+          }))
+        setGuestMeals((prev) => [
+          ...prev.filter((g) => g.date !== date),
+          ...valid,
+        ])
+      }
       showToast('食数データを保存しました')
     },
     [yearMonth, showToast]
@@ -126,6 +144,7 @@ export function AppProvider({ children }) {
     members,
     config,
     mealLogs,
+    guestMeals,
     expenses,
     tournamentItems,
     campItems,

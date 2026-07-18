@@ -80,14 +80,21 @@ export async function saveMembers(members) {
   return apiPost('saveMembers', { members })
 }
 
-// 食数ログ一括保存（UPSERT）
-export async function saveMealLogs(yearMonth, logs) {
+// 食数ログ一括保存（UPSERT）+ 見学高校生の食数（当日分を総入れ替え）
+export async function saveMealLogs(yearMonth, logs, guests, date) {
+  guests = guests || []
   if (USE_DUMMY) {
     await delay(150)
     upsertDummyMealLogs(yearMonth, logs)
+    if (date) replaceDummyGuestMeals(yearMonth, date, guests)
     return { saved: logs.length }
   }
-  return apiPost('saveMealLogs', { year_month: yearMonth, logs })
+  return apiPost('saveMealLogs', {
+    year_month: yearMonth,
+    date: date,
+    logs: logs,
+    guests: guests,
+  })
 }
 
 // 月次経費一括保存（UPSERT）
@@ -138,6 +145,21 @@ function upsertDummyMealLogs(yearMonth, logs) {
     }
   }
   store.mealLogs = Array.from(map.values())
+}
+
+function replaceDummyGuestMeals(yearMonth, date, guests) {
+  const store = dummyStore.loaded[yearMonth]
+  if (!store) return
+  const others = (store.guestMeals || []).filter((g) => g.date !== date)
+  const valid = guests
+    .filter((g) => (g.name || '').trim() !== '')
+    .map((g) => ({
+      date,
+      name: g.name.trim(),
+      breakfast: !!g.breakfast,
+      dinner: !!g.dinner,
+    }))
+  store.guestMeals = [...others, ...valid]
 }
 
 function delay(ms) {

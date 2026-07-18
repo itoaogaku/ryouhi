@@ -1,11 +1,21 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { Save, Coffee, UtensilsCrossed, CheckCheck, X } from 'lucide-react'
+import {
+  Save,
+  Coffee,
+  UtensilsCrossed,
+  CheckCheck,
+  X,
+  Plus,
+  Trash2,
+  GraduationCap,
+} from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { RANKS, GROUPS } from '../lib/constants.js'
 import {
   Button,
   Card,
   CardContent,
+  Input,
   Select,
   Checkbox,
   Badge,
@@ -16,12 +26,14 @@ import {
   toDateStr,
   weekdayOf,
   WEEKDAY_JA,
+  uid,
   cn,
 } from '../lib/utils.js'
 
 // 画面B：日別・月別 食数管理
 export default function MealLogsScreen() {
-  const { year, month, members, mealLogs, loading, saveMealLogs } = useApp()
+  const { year, month, members, mealLogs, guestMeals, loading, saveMealLogs } =
+    useApp()
 
   const today = new Date()
   const defaultDay =
@@ -36,6 +48,8 @@ export default function MealLogsScreen() {
 
   // date -> member_id -> { breakfast, dinner } の編集バッファ（当日のみ）
   const [draft, setDraft] = useState({})
+  // 見学高校生の当日バッファ: [{ uid, name, breakfast, dinner }]
+  const [guestDraft, setGuestDraft] = useState([])
 
   const dateStr = toDateStr(year, month, day)
   const totalDays = daysInMonth(year, month)
@@ -45,7 +59,7 @@ export default function MealLogsScreen() {
     if (day > totalDays) setDay(totalDays)
   }, [totalDays, day])
 
-  // mealLogs から当日の状態を初期化
+  // mealLogs / guestMeals から当日の状態を初期化
   useEffect(() => {
     const map = {}
     for (const log of mealLogs) {
@@ -57,8 +71,18 @@ export default function MealLogsScreen() {
       }
     }
     setDraft(map)
+    setGuestDraft(
+      guestMeals
+        .filter((g) => g.date === dateStr)
+        .map((g) => ({
+          uid: uid(),
+          name: g.name || '',
+          breakfast: !!g.breakfast,
+          dinner: !!g.dinner,
+        }))
+    )
     setDirty(false)
-  }, [mealLogs, dateStr])
+  }, [mealLogs, guestMeals, dateStr])
 
   const activeMembers = useMemo(
     () => members.filter((m) => m.active),
@@ -94,6 +118,25 @@ export default function MealLogsScreen() {
     setDirty(true)
   }
 
+  // ---- 見学高校生の操作 ----
+  const addGuest = () => {
+    setGuestDraft((prev) => [
+      ...prev,
+      { uid: uid(), name: '', breakfast: false, dinner: true },
+    ])
+    setDirty(true)
+  }
+  const updateGuest = (uidKey, field, value) => {
+    setGuestDraft((prev) =>
+      prev.map((g) => (g.uid === uidKey ? { ...g, [field]: value } : g))
+    )
+    setDirty(true)
+  }
+  const removeGuest = (uidKey) => {
+    setGuestDraft((prev) => prev.filter((g) => g.uid !== uidKey))
+    setDirty(true)
+  }
+
   const handleSave = async () => {
     setSaving(true)
     try {
@@ -107,7 +150,16 @@ export default function MealLogsScreen() {
           dinner: !!v.dinner,
         }
       })
-      await saveMealLogs(logs)
+      // 見学高校生（名前入力ありのみ保存）
+      const guests = guestDraft
+        .filter((g) => (g.name || '').trim() !== '')
+        .map((g) => ({
+          date: dateStr,
+          name: g.name.trim(),
+          breakfast: !!g.breakfast,
+          dinner: !!g.dinner,
+        }))
+      await saveMealLogs(logs, guests, dateStr)
       setDirty(false)
     } finally {
       setSaving(false)
@@ -120,6 +172,14 @@ export default function MealLogsScreen() {
       const v = getVal(m.id)
       if (v.breakfast) acc.breakfast += 1
       if (v.dinner) acc.dinner += 1
+      return acc
+    },
+    { breakfast: 0, dinner: 0 }
+  )
+  const guestCounts = guestDraft.reduce(
+    (acc, g) => {
+      if (g.breakfast) acc.breakfast += 1
+      if (g.dinner) acc.dinner += 1
       return acc
     },
     { breakfast: 0, dinner: 0 }
@@ -289,8 +349,79 @@ export default function MealLogsScreen() {
         </CardContent>
       </Card>
 
+      {/* 見学高校生の食数 */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-700">
+              <GraduationCap className="h-4 w-4 text-indigo-500" />
+              見学高校生の食数（{WEEKDAY_JA[dow]}／{month}月{day}日）
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="default" className="gap-1">
+                <Coffee className="h-3.5 w-3.5" /> 朝 {guestCounts.breakfast}
+              </Badge>
+              <Badge variant="secondary" className="gap-1">
+                <UtensilsCrossed className="h-3.5 w-3.5" /> 夕 {guestCounts.dinner}
+              </Badge>
+              <Button size="sm" variant="secondary" onClick={addGuest}>
+                <Plus className="h-3.5 w-3.5" />
+                高校生を追加
+              </Button>
+            </div>
+          </div>
+
+          {guestDraft.length === 0 ? (
+            <p className="py-4 text-center text-xs text-slate-400">
+              この日の見学高校生はいません。「高校生を追加」で名前と朝夕を記録できます。
+            </p>
+          ) : (
+            <div className="space-y-2">
+              <div className="grid grid-cols-[1fr_64px_64px_32px] gap-2 px-1 text-[11px] font-medium text-slate-400">
+                <span>氏名（学校名など）</span>
+                <span className="text-center">朝食</span>
+                <span className="text-center">夕食</span>
+                <span></span>
+              </div>
+              {guestDraft.map((g) => (
+                <div
+                  key={g.uid}
+                  className="grid grid-cols-[1fr_64px_64px_32px] items-center gap-2"
+                >
+                  <Input
+                    value={g.name}
+                    placeholder="〇〇高 田中"
+                    onChange={(e) => updateGuest(g.uid, 'name', e.target.value)}
+                  />
+                  <div className="flex justify-center">
+                    <Checkbox
+                      checked={g.breakfast}
+                      onChange={(val) => updateGuest(g.uid, 'breakfast', val)}
+                    />
+                  </div>
+                  <div className="flex justify-center">
+                    <Checkbox
+                      checked={g.dinner}
+                      onChange={(val) => updateGuest(g.uid, 'dinner', val)}
+                    />
+                  </div>
+                  <button
+                    onClick={() => removeGuest(g.uid)}
+                    className="flex h-8 w-8 items-center justify-center rounded text-slate-300 hover:bg-red-50 hover:text-destructive"
+                    aria-label="削除"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <p className="text-xs text-muted-foreground">
-        ※チェックの有無を当日の食数として一括保存します（GAS: saveMealLogs / UPSERT）。
+        ※チェックの有無を当日の食数として一括保存します（メンバー: UPSERT、見学高校生:
+        当日分を入れ替え）。上部の「一括保存」ボタンで高校生分も同時に保存されます。
       </p>
     </div>
   )
