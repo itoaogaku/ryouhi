@@ -80,7 +80,12 @@ function generateMealLogs(members, year, month) {
   return logs
 }
 
-const GUEST_NAMES = ['青葉高 田村', '青葉高 森田', '桜丘高 岡本', '桜丘高 西村']
+const GUEST_LIST = [
+  { school: '青葉高校', name: '田村 蓮' },
+  { school: '青葉高校', name: '森田 大和' },
+  { school: '桜丘高校', name: '岡本 悠真' },
+  { school: '桜丘高校', name: '西村 陽向' },
+]
 
 // 見学高校生の食数（一部の日にサンプルを生成）
 function generateGuestMeals(year, month) {
@@ -93,19 +98,11 @@ function generateGuestMeals(year, month) {
   // 数日おきに1〜2名が見学に来る想定
   for (let d = 5; d <= lastDay; d += 7) {
     const date = toDateStr(year, month, d)
-    guests.push({
-      date,
-      name: GUEST_NAMES[d % GUEST_NAMES.length],
-      breakfast: false,
-      dinner: true,
-    })
+    const a = GUEST_LIST[d % GUEST_LIST.length]
+    guests.push({ date, school: a.school, name: a.name, breakfast: false, dinner: true })
     if (d % 2 === 0) {
-      guests.push({
-        date,
-        name: GUEST_NAMES[(d + 1) % GUEST_NAMES.length],
-        breakfast: true,
-        dinner: true,
-      })
+      const b = GUEST_LIST[(d + 1) % GUEST_LIST.length]
+      guests.push({ date, school: b.school, name: b.name, breakfast: true, dinner: true })
     }
   }
   return guests

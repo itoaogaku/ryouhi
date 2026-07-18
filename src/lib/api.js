@@ -152,10 +152,11 @@ function replaceDummyGuestMeals(yearMonth, date, guests) {
   if (!store) return
   const others = (store.guestMeals || []).filter((g) => g.date !== date)
   const valid = guests
-    .filter((g) => (g.name || '').trim() !== '')
+    .filter((g) => (g.name || '').trim() !== '' || (g.school || '').trim() !== '')
     .map((g) => ({
       date,
-      name: g.name.trim(),
+      school: (g.school || '').trim(),
+      name: (g.name || '').trim(),
       breakfast: !!g.breakfast,
       dinner: !!g.dinner,
     }))

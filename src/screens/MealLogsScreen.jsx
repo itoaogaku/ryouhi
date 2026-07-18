@@ -76,6 +76,7 @@ export default function MealLogsScreen() {
         .filter((g) => g.date === dateStr)
         .map((g) => ({
           uid: uid(),
+          school: g.school || '',
           name: g.name || '',
           breakfast: !!g.breakfast,
           dinner: !!g.dinner,
@@ -122,7 +123,7 @@ export default function MealLogsScreen() {
   const addGuest = () => {
     setGuestDraft((prev) => [
       ...prev,
-      { uid: uid(), name: '', breakfast: false, dinner: true },
+      { uid: uid(), school: '', name: '', breakfast: false, dinner: true },
     ])
     setDirty(true)
   }
@@ -150,12 +151,15 @@ export default function MealLogsScreen() {
           dinner: !!v.dinner,
         }
       })
-      // 見学高校生（名前入力ありのみ保存）
+      // 見学高校生（学校名または氏名ありのみ保存）
       const guests = guestDraft
-        .filter((g) => (g.name || '').trim() !== '')
+        .filter(
+          (g) => (g.name || '').trim() !== '' || (g.school || '').trim() !== ''
+        )
         .map((g) => ({
           date: dateStr,
-          name: g.name.trim(),
+          school: (g.school || '').trim(),
+          name: (g.name || '').trim(),
           breakfast: !!g.breakfast,
           dinner: !!g.dinner,
         }))
@@ -377,8 +381,9 @@ export default function MealLogsScreen() {
             </p>
           ) : (
             <div className="space-y-2">
-              <div className="grid grid-cols-[1fr_64px_64px_32px] gap-2 px-1 text-[11px] font-medium text-slate-400">
-                <span>氏名（学校名など）</span>
+              <div className="grid grid-cols-[1.1fr_1.1fr_56px_56px_32px] gap-2 px-1 text-[11px] font-medium text-slate-400">
+                <span>学校名</span>
+                <span>氏名</span>
                 <span className="text-center">朝食</span>
                 <span className="text-center">夕食</span>
                 <span></span>
@@ -386,11 +391,16 @@ export default function MealLogsScreen() {
               {guestDraft.map((g) => (
                 <div
                   key={g.uid}
-                  className="grid grid-cols-[1fr_64px_64px_32px] items-center gap-2"
+                  className="grid grid-cols-[1.1fr_1.1fr_56px_56px_32px] items-center gap-2"
                 >
                   <Input
+                    value={g.school}
+                    placeholder="〇〇高校"
+                    onChange={(e) => updateGuest(g.uid, 'school', e.target.value)}
+                  />
+                  <Input
                     value={g.name}
-                    placeholder="〇〇高 田中"
+                    placeholder="田中 太郎"
                     onChange={(e) => updateGuest(g.uid, 'name', e.target.value)}
                   />
                   <div className="flex justify-center">

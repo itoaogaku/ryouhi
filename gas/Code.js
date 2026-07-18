@@ -33,7 +33,7 @@ var SHEETS = {
   },
   guest_meals: {
     name: 'guest_meals',
-    headers: ['date', 'name', 'breakfast', 'dinner'],
+    headers: ['date', 'school', 'name', 'breakfast', 'dinner'],
   },
   monthly_expenses: {
     name: 'monthly_expenses',
@@ -259,18 +259,26 @@ function saveGuestMeals_(date, guests) {
   var kept = [];
   for (var i = 0; i < values.length; i++) {
     var row = values[i];
-    if (row[0] === '' && row[1] === '') continue;
+    if (row[0] === '' && row[2] === '' && row[1] === '') continue;
     if (normDate_(row[0]) === date) continue; // 当日は破棄
-    kept.push([normDate_(row[0]), String(row[1]), toBool_(row[2]), toBool_(row[3])]);
+    kept.push([
+      normDate_(row[0]),
+      String(row[1]),
+      String(row[2]),
+      toBool_(row[3]),
+      toBool_(row[4]),
+    ]);
   }
 
-  // 名前ありのみ追加
+  // 学校名または氏名のいずれかがあれば追加
   var newRows = [];
   for (var g = 0; g < guests.length; g++) {
+    var school = String(guests[g].school || '').trim();
     var name = String(guests[g].name || '').trim();
-    if (name === '') continue;
+    if (school === '' && name === '') continue;
     newRows.push([
       date,
+      school,
       name,
       toBool_(guests[g].breakfast),
       toBool_(guests[g].dinner),
@@ -419,14 +427,15 @@ function readGuestMeals_(yearMonth) {
   var out = [];
   for (var i = 0; i < values.length; i++) {
     var r = values[i];
-    if (r[0] === '' && r[1] === '') continue;
+    if (r[0] === '' && r[1] === '' && r[2] === '') continue;
     var date = normDate_(r[0]);
     if (yearMonth && date.indexOf(yearMonth) !== 0) continue;
     out.push({
       date: date,
-      name: String(r[1]),
-      breakfast: toBool_(r[2]),
-      dinner: toBool_(r[3]),
+      school: String(r[1]),
+      name: String(r[2]),
+      breakfast: toBool_(r[3]),
+      dinner: toBool_(r[4]),
     });
   }
   return out;

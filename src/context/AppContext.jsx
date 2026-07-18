@@ -92,10 +92,13 @@ export function AppProvider({ children }) {
       // 見学高校生は当日分を総入れ替え
       if (date) {
         const valid = guests
-          .filter((g) => (g.name || '').trim() !== '')
+          .filter(
+            (g) => (g.name || '').trim() !== '' || (g.school || '').trim() !== ''
+          )
           .map((g) => ({
             date,
-            name: g.name.trim(),
+            school: (g.school || '').trim(),
+            name: (g.name || '').trim(),
             breakfast: !!g.breakfast,
             dinner: !!g.dinner,
           }))
