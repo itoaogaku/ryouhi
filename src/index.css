@@ -1,0 +1,47 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-slate-50 text-foreground antialiased;
+    font-feature-settings: 'palt';
+  }
+  /* Firefox 用スクロールバー */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+  }
+  /* WebKit 用スクロールバー */
+  *::-webkit-scrollbar {
+    height: 8px;
+    width: 8px;
+  }
+  *::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-slate-300;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+/* 数値入力の上下スピナーを非表示にして表計算風に */
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type='number'] {
+  -moz-appearance: textfield;
+}
+
+/* PDF レンダリング用の隠しコンテナ（画面外へ退避） */
+.pdf-offscreen {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  z-index: -1;
+}

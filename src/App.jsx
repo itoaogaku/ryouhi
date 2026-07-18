@@ -1,0 +1,93 @@
+import React, { useState } from 'react'
+import { Users, CalendarCheck, Receipt, FileSpreadsheet, Building2 } from 'lucide-react'
+import { useApp } from './context/AppContext.jsx'
+import { cn } from './lib/utils.js'
+import { formatYearMonthJa } from './lib/utils.js'
+import MonthSelector from './components/MonthSelector.jsx'
+import Toast from './components/Toast.jsx'
+import { Badge } from './components/ui/index.jsx'
+
+import MembersScreen from './screens/MembersScreen.jsx'
+import MealLogsScreen from './screens/MealLogsScreen.jsx'
+import ExpensesScreen from './screens/ExpensesScreen.jsx'
+import SettlementScreen from './screens/SettlementScreen.jsx'
+
+const TABS = [
+  { id: 'members', label: '寮生マスター', icon: Users, Component: MembersScreen },
+  { id: 'meals', label: '食数管理', icon: CalendarCheck, Component: MealLogsScreen },
+  { id: 'expenses', label: '月次経費', icon: Receipt, Component: ExpensesScreen },
+  { id: 'settlement', label: '清算・PDF出力', icon: FileSpreadsheet, Component: SettlementScreen },
+]
+
+export default function App() {
+  const [active, setActive] = useState('members')
+  const { year, month, usingDummy, error } = useApp()
+  const ActiveComponent = TABS.find((t) => t.id === active).Component
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      {/* ヘッダー */}
+      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
+        <div className="mx-auto max-w-7xl px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-white">
+                <Building2 className="h-5 w-5" />
+              </div>
+              <div>
+                <h1 className="text-base font-bold leading-tight text-slate-900">
+                  寮費・食費清算管理システム
+                </h1>
+                <p className="text-xs text-muted-foreground">
+                  対象: {formatYearMonthJa(year, month)}
+                  {usingDummy && (
+                    <Badge variant="warning" className="ml-2">
+                      ダミーデータ
+                    </Badge>
+                  )}
+                </p>
+              </div>
+            </div>
+            <MonthSelector />
+          </div>
+        </div>
+        {/* タブナビゲーション */}
+        <nav className="mx-auto max-w-7xl px-2">
+          <div className="flex gap-1 overflow-x-auto">
+            {TABS.map((tab) => {
+              const Icon = tab.icon
+              const isActive = active === tab.id
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActive(tab.id)}
+                  className={cn(
+                    'flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium transition-colors',
+                    isActive
+                      ? 'border-primary text-primary'
+                      : 'border-transparent text-slate-500 hover:text-slate-800'
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                  {tab.label}
+                </button>
+              )
+            })}
+          </div>
+        </nav>
+      </header>
+
+      {/* 本体 */}
+      <main className="mx-auto max-w-7xl px-4 py-6">
+        {error && (
+          <div className="mb-4 rounded-md border border-destructive/20 bg-red-50 px-4 py-3 text-sm text-destructive">
+            {error}（ダミーデータで表示している可能性があります）
+          </div>
+        )}
+        <ActiveComponent />
+      </main>
+
+      <Toast />
+    </div>
+  )
+}

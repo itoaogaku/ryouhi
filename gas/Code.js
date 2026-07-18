@@ -1,0 +1,424 @@
+/*************************************************************
+ * 寮費・食費清算管理システム — GAS バックエンド (Web Apps API)
+ * -----------------------------------------------------------
+ * Google スプレッドシートを DB として使用し、フロントエンド
+ * (Vercel) からの CORS リクエストを処理する API サーバーです。
+ *
+ * 【デプロイ手順】
+ *  1. スプレッドシートを新規作成し「拡張機能 > Apps Script」を開く
+ *  2. 本ファイルの内容を Code.gs に貼り付けて保存
+ *  3. 一度 `setupSheets` を実行して各シートを自動生成（初回のみ）
+ *  4. 「デプロイ > 新しいデプロイ > 種類:ウェブアプリ」
+ *       - 次のユーザーとして実行: 自分
+ *       - アクセスできるユーザー: 全員
+ *  5. 発行された /exec で終わる URL をフロントの
+ *     VITE_GAS_API_URL に設定
+ *
+ * 【CORS について】
+ *  ContentService(JSON) を返すシンプルな GET/POST は
+ *  ブラウザのプリフライトが発生しません。フロント側は
+ *  Content-Type: text/plain で POST し、ここで JSON.parse します。
+ *************************************************************/
+
+// ---- シート名・スキーマ定義 ---------------------------------
+var SHEETS = {
+  members: {
+    name: 'members',
+    headers: ['id', 'name', 'rank', 'group', 'active'],
+  },
+  meal_logs: {
+    name: 'meal_logs',
+    headers: ['date', 'member_id', 'breakfast', 'dinner'],
+  },
+  monthly_expenses: {
+    name: 'monthly_expenses',
+    headers: [
+      'year_month',
+      'member_id',
+      'tournament_fee',
+      'tournament_support_rate',
+      'camp_fee_per_night',
+      'camp_nights',
+      'medical_actual',
+      'medical_subsidy',
+      'sagawa_fee',
+      'wear_fee',
+    ],
+  },
+  config: {
+    name: 'config',
+    headers: ['key', 'value'],
+  },
+};
+
+var DEFAULT_CONFIG = [
+  ['breakfast_price', 400],
+  ['dinner_price', 600],
+  ['base_club_fee', 3000],
+];
+
+// =============================================================
+// エントリポイント
+// =============================================================
+function doGet(e) {
+  return handleRequest(e, 'GET');
+}
+
+function doPost(e) {
+  return handleRequest(e, 'POST');
+}
+
+function handleRequest(e, method) {
+  try {
+    var params = {};
+    // POST body (text/plain JSON) を優先的に解析
+    if (method === 'POST' && e.postData && e.postData.contents) {
+      try {
+        params = JSON.parse(e.postData.contents) || {};
+      } catch (err) {
+        params = {};
+      }
+    }
+    // クエリパラメータをマージ
+    if (e.parameter) {
+      for (var k in e.parameter) {
+        if (params[k] === undefined) params[k] = e.parameter[k];
+      }
+    }
+
+    var action = params.action;
+    var data;
+
+    switch (action) {
+      case 'getInitialData':
+        data = getInitialData(params.year_month);
+        break;
+      case 'saveMembers':
+        data = saveMembers(params.members);
+        break;
+      case 'saveMealLogs':
+        data = saveMealLogs(params.year_month, params.logs);
+        break;
+      case 'saveExpenses':
+        data = saveExpenses(params.year_month, params.expenses);
+        break;
+      case 'ping':
+        data = { ok: true, time: new Date().toISOString() };
+        break;
+      default:
+        return jsonOutput({ status: 'error', message: '未知のaction: ' + action });
+    }
+
+    return jsonOutput({ status: 'ok', data: data });
+  } catch (err) {
+    return jsonOutput({ status: 'error', message: String(err) });
+  }
+}
+
+// JSON レスポンス（CORS 安全なシンプルレスポンス）
+function jsonOutput(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(
+    ContentService.MimeType.JSON
+  );
+}
+
+// =============================================================
+// API 実装
+// =============================================================
+
+// 初期データ一括取得
+function getInitialData(yearMonth) {
+  ensureSheets_();
+  var members = readMembers_();
+  var config = readConfig_();
+  var mealLogs = readMealLogs_(yearMonth);
+  var expenses = readExpenses_(yearMonth);
+  return {
+    members: members,
+    config: config,
+    mealLogs: mealLogs,
+    expenses: expenses,
+  };
+}
+
+// メンバーマスタ全置換保存
+function saveMembers(members) {
+  ensureSheets_();
+  members = members || [];
+  var sheet = getSheet_(SHEETS.members.name);
+  clearBody_(sheet);
+  if (members.length) {
+    var rows = members.map(function (m) {
+      return [
+        Number(m.id),
+        String(m.name || ''),
+        String(m.rank || ''),
+        String(m.group || ''),
+        toBool_(m.active),
+      ];
+    });
+    // ループ内 setValue を避け setValues で一括書き込み
+    sheet.getRange(2, 1, rows.length, SHEETS.members.headers.length).setValues(rows);
+  }
+  return { saved: members.length };
+}
+
+// 食数ログ UPSERT（key: date + member_id）
+function saveMealLogs(yearMonth, logs) {
+  ensureSheets_();
+  logs = logs || [];
+  var sheet = getSheet_(SHEETS.meal_logs.name);
+  var values = getBody_(sheet); // [date, member_id, breakfast, dinner]
+
+  // 既存を Map 化
+  var map = {};
+  for (var i = 0; i < values.length; i++) {
+    var row = values[i];
+    if (row[0] === '' && row[1] === '') continue;
+    var key = normDate_(row[0]) + '__' + String(row[1]);
+    map[key] = [normDate_(row[0]), Number(row[1]), toBool_(row[2]), toBool_(row[3])];
+  }
+
+  // UPSERT（朝夕どちらも false の行は削除）
+  for (var j = 0; j < logs.length; j++) {
+    var l = logs[j];
+    var k = normDate_(l.date) + '__' + String(l.member_id);
+    var bf = toBool_(l.breakfast);
+    var dn = toBool_(l.dinner);
+    if (bf || dn) {
+      map[k] = [normDate_(l.date), Number(l.member_id), bf, dn];
+    } else {
+      delete map[k];
+    }
+  }
+
+  // 一括書き戻し
+  var out = [];
+  for (var key2 in map) out.push(map[key2]);
+  clearBody_(sheet);
+  if (out.length) {
+    sheet.getRange(2, 1, out.length, SHEETS.meal_logs.headers.length).setValues(out);
+  }
+  return { saved: logs.length, total: out.length };
+}
+
+// 月次経費 UPSERT（key: year_month + member_id）
+function saveExpenses(yearMonth, expenses) {
+  ensureSheets_();
+  expenses = expenses || [];
+  var sheet = getSheet_(SHEETS.monthly_expenses.name);
+  var headers = SHEETS.monthly_expenses.headers;
+  var values = getBody_(sheet);
+
+  var map = {};
+  for (var i = 0; i < values.length; i++) {
+    var row = values[i];
+    if (row[0] === '' && row[1] === '') continue;
+    var key = String(row[0]) + '__' + String(row[1]);
+    map[key] = row.slice(0, headers.length);
+  }
+
+  for (var j = 0; j < expenses.length; j++) {
+    var e = expenses[j];
+    var ym = e.year_month || yearMonth;
+    var k = String(ym) + '__' + String(e.member_id);
+    map[k] = [
+      String(ym),
+      Number(e.member_id),
+      num_(e.tournament_fee),
+      num_(e.tournament_support_rate),
+      num_(e.camp_fee_per_night),
+      num_(e.camp_nights),
+      num_(e.medical_actual),
+      num_(e.medical_subsidy),
+      num_(e.sagawa_fee),
+      num_(e.wear_fee),
+    ];
+  }
+
+  var out = [];
+  for (var key2 in map) out.push(map[key2]);
+  clearBody_(sheet);
+  if (out.length) {
+    sheet.getRange(2, 1, out.length, headers.length).setValues(out);
+  }
+  return { saved: expenses.length, total: out.length };
+}
+
+// =============================================================
+// 読み込み helper
+// =============================================================
+
+function readMembers_() {
+  var sheet = getSheet_(SHEETS.members.name);
+  var values = getBody_(sheet);
+  var out = [];
+  for (var i = 0; i < values.length; i++) {
+    var r = values[i];
+    if (r[0] === '' && r[1] === '') continue;
+    out.push({
+      id: Number(r[0]),
+      name: String(r[1]),
+      rank: String(r[2]),
+      group: String(r[3]),
+      active: toBool_(r[4]),
+    });
+  }
+  return out;
+}
+
+function readConfig_() {
+  var sheet = getSheet_(SHEETS.config.name);
+  var values = getBody_(sheet);
+  var out = {};
+  for (var i = 0; i < values.length; i++) {
+    var r = values[i];
+    if (r[0] === '') continue;
+    var v = r[1];
+    var n = Number(v);
+    out[String(r[0])] = isNaN(n) ? v : n;
+  }
+  return out;
+}
+
+function readMealLogs_(yearMonth) {
+  var sheet = getSheet_(SHEETS.meal_logs.name);
+  var values = getBody_(sheet);
+  var out = [];
+  for (var i = 0; i < values.length; i++) {
+    var r = values[i];
+    if (r[0] === '' && r[1] === '') continue;
+    var date = normDate_(r[0]);
+    // yearMonth 指定時はその月のみ返す
+    if (yearMonth && date.indexOf(yearMonth) !== 0) continue;
+    out.push({
+      date: date,
+      member_id: Number(r[1]),
+      breakfast: toBool_(r[2]),
+      dinner: toBool_(r[3]),
+    });
+  }
+  return out;
+}
+
+function readExpenses_(yearMonth) {
+  var sheet = getSheet_(SHEETS.monthly_expenses.name);
+  var values = getBody_(sheet);
+  var out = [];
+  for (var i = 0; i < values.length; i++) {
+    var r = values[i];
+    if (r[0] === '' && r[1] === '') continue;
+    if (yearMonth && String(r[0]) !== yearMonth) continue;
+    out.push({
+      year_month: String(r[0]),
+      member_id: Number(r[1]),
+      tournament_fee: num_(r[2]),
+      tournament_support_rate: num_(r[3]),
+      camp_fee_per_night: num_(r[4]),
+      camp_nights: num_(r[5]),
+      medical_actual: num_(r[6]),
+      medical_subsidy: num_(r[7]),
+      sagawa_fee: num_(r[8]),
+      wear_fee: num_(r[9]),
+    });
+  }
+  return out;
+}
+
+// =============================================================
+// シート管理 helper
+// =============================================================
+
+function getSS_() {
+  return SpreadsheetApp.getActiveSpreadsheet();
+}
+
+function getSheet_(name) {
+  var ss = getSS_();
+  var sheet = ss.getSheetByName(name);
+  if (!sheet) {
+    sheet = ss.insertSheet(name);
+  }
+  return sheet;
+}
+
+// ヘッダー行以外（本文）を2次元配列で取得
+function getBody_(sheet) {
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+  if (lastRow < 2 || lastCol < 1) return [];
+  return sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+}
+
+// 本文をクリア（ヘッダーは残す）
+function clearBody_(sheet) {
+  var lastRow = sheet.getLastRow();
+  var lastCol = Math.max(1, sheet.getLastColumn());
+  if (lastRow >= 2) {
+    sheet.getRange(2, 1, lastRow - 1, lastCol).clearContent();
+  }
+}
+
+// 全シートの存在とヘッダーを保証
+function ensureSheets_() {
+  for (var key in SHEETS) {
+    var def = SHEETS[key];
+    var sheet = getSheet_(def.name);
+    var firstRow = sheet.getRange(1, 1, 1, def.headers.length).getValues()[0];
+    var needHeader = false;
+    for (var i = 0; i < def.headers.length; i++) {
+      if (firstRow[i] !== def.headers[i]) {
+        needHeader = true;
+        break;
+      }
+    }
+    if (needHeader) {
+      sheet.getRange(1, 1, 1, def.headers.length).setValues([def.headers]);
+      sheet.setFrozenRows(1);
+    }
+  }
+  // config が空ならデフォルト投入
+  var cfg = getSheet_(SHEETS.config.name);
+  if (cfg.getLastRow() < 2) {
+    cfg.getRange(2, 1, DEFAULT_CONFIG.length, 2).setValues(DEFAULT_CONFIG);
+  }
+}
+
+// =============================================================
+// 手動セットアップ（初回にエディタから実行）
+// =============================================================
+function setupSheets() {
+  ensureSheets_();
+  SpreadsheetApp.getActiveSpreadsheet().toast(
+    'シートを初期化しました (members / meal_logs / monthly_expenses / config)',
+    'セットアップ完了',
+    5
+  );
+}
+
+// =============================================================
+// 値変換 helper
+// =============================================================
+
+function toBool_(v) {
+  if (v === true) return true;
+  if (v === false) return false;
+  var s = String(v).trim().toUpperCase();
+  return s === 'TRUE' || s === '1' || s === 'YES' || s === '◯' || s === 'O';
+}
+
+function num_(v) {
+  var n = Number(v);
+  return isNaN(n) ? 0 : n;
+}
+
+// 日付を YYYY-MM-DD 文字列に正規化
+function normDate_(v) {
+  if (v instanceof Date) {
+    var y = v.getFullYear();
+    var m = ('0' + (v.getMonth() + 1)).slice(-2);
+    var d = ('0' + v.getDate()).slice(-2);
+    return y + '-' + m + '-' + d;
+  }
+  return String(v);
+}
