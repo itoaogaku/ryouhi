@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef } from 'react'
 import {
   FileDown,
+  FileSpreadsheet,
   Loader2,
   TrendingUp,
   Users,
@@ -26,8 +27,9 @@ import {
   groupSettlementRows,
   sumTotals,
 } from '../lib/calc.js'
-import { generateGroupPdf } from '../lib/pdf.js'
+import { generateGroupPdf, generateSummaryPdf } from '../lib/pdf.js'
 import CollectionSheet from '../components/CollectionSheet.jsx'
+import SummarySheet from '../components/SummarySheet.jsx'
 
 // 画面D：清算一覧・集金用PDF出力
 export default function SettlementScreen() {
@@ -47,7 +49,9 @@ export default function SettlementScreen() {
   const [filterGroup, setFilterGroup] = useState('all')
   const [generating, setGenerating] = useState(false)
   const [expanded, setExpanded] = useState(() => new Set())
+  const [generatingSummary, setGeneratingSummary] = useState(false)
   const sheetsRef = useRef(null)
+  const summaryRef = useRef(null)
 
   const rows = useMemo(
     () =>
@@ -109,6 +113,30 @@ export default function SettlementScreen() {
     }
   }
 
+  // 全選手一覧PDF（A4横・全データ）
+  const handleDownloadSummaryPdf = async () => {
+    setGeneratingSummary(true)
+    try {
+      await new Promise((r) => setTimeout(r, 50))
+      const container = summaryRef.current
+      const pages = Array.from(container.querySelectorAll('[data-pdf-page]'))
+      if (pages.length === 0) {
+        showToast('出力対象のデータがありません', 'error')
+        return
+      }
+      await generateSummaryPdf(
+        pages,
+        `全選手一覧_${formatYearMonthJa(year, month)}.pdf`
+      )
+      showToast('全選手一覧PDFをダウンロードしました')
+    } catch (e) {
+      console.error(e)
+      showToast('PDF生成に失敗しました', 'error')
+    } finally {
+      setGeneratingSummary(false)
+    }
+  }
+
   if (loading) return <LoadingState />
 
   return (
@@ -152,14 +180,31 @@ export default function SettlementScreen() {
           </Select>
           <Badge variant="secondary">{displayRows.length}名</Badge>
         </div>
-        <Button onClick={handleDownloadPdf} disabled={generating || rows.length === 0}>
-          {generating ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <FileDown className="h-4 w-4" />
-          )}
-          {generating ? 'PDF生成中...' : '集金用PDFダウンロード'}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="secondary"
+            onClick={handleDownloadSummaryPdf}
+            disabled={generatingSummary || rows.length === 0}
+          >
+            {generatingSummary ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <FileSpreadsheet className="h-4 w-4" />
+            )}
+            {generatingSummary ? '生成中...' : '全選手一覧PDF（横）'}
+          </Button>
+          <Button
+            onClick={handleDownloadPdf}
+            disabled={generating || rows.length === 0}
+          >
+            {generating ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <FileDown className="h-4 w-4" />
+            )}
+            {generating ? 'PDF生成中...' : '集金用PDF（グループ別）'}
+          </Button>
+        </div>
       </div>
 
       {/* グループごとの合計バッジ */}
@@ -320,6 +365,17 @@ export default function SettlementScreen() {
             />
           </div>
         ))}
+      </div>
+
+      {/* PDF描画用オフスクリーン要素（全選手一覧・A4横） */}
+      <div className="pdf-offscreen" ref={summaryRef} aria-hidden>
+        <SummarySheet
+          rows={rows}
+          groups={GROUPS}
+          year={year}
+          month={month}
+          config={config}
+        />
       </div>
     </div>
   )
