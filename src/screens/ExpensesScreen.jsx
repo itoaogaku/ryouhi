@@ -8,6 +8,7 @@ import {
   Trash2,
   Trophy,
   Tent,
+  Users,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { GROUPS, CAMP_PRICE_PRESETS } from '../lib/constants.js'
@@ -18,6 +19,8 @@ import {
   Input,
   Select,
   Badge,
+  Checkbox,
+  Modal,
   Skeleton,
 } from '../components/ui/index.jsx'
 import {
@@ -47,6 +50,7 @@ export default function ExpensesScreen() {
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [filterGroup, setFilterGroup] = useState('all')
+  const [bulkType, setBulkType] = useState(null) // 'tournament' | 'camp' | null
 
   const activeMembers = useMemo(
     () => members.filter((m) => m.active),
@@ -185,6 +189,74 @@ export default function ExpensesScreen() {
     })
   }
 
+  // ---- 一括登録：選択メンバーに同じ大会を追加（同名は上書き） ----
+  const applyBulkTournament = (event, memberIds) => {
+    setRows((prev) => {
+      const next = { ...prev }
+      for (const id of memberIds) {
+        const key = String(id)
+        const cur = next[key]
+        if (!cur) continue
+        const found = cur.tournaments.find((t) => t.name === event.name)
+        const tournaments = found
+          ? cur.tournaments.map((t) =>
+              t.name === event.name
+                ? { ...t, fee: event.fee, subsidy: event.subsidy }
+                : t
+            )
+          : [
+              ...cur.tournaments,
+              {
+                uid: uid(),
+                name: event.name,
+                fee: event.fee,
+                subsidy: event.subsidy,
+              },
+            ]
+        next[key] = { ...cur, tournaments }
+      }
+      return next
+    })
+    setDirty(true)
+    setBulkType(null)
+  }
+
+  // ---- 一括登録：選択メンバーに同じ合宿を追加（同名は上書き） ----
+  const applyBulkCamp = (event, memberIds) => {
+    setRows((prev) => {
+      const next = { ...prev }
+      for (const id of memberIds) {
+        const key = String(id)
+        const cur = next[key]
+        if (!cur) continue
+        const found = cur.camps.find((c) => c.name === event.name)
+        const camps = found
+          ? cur.camps.map((c) =>
+              c.name === event.name
+                ? {
+                    ...c,
+                    fee_per_night: event.fee_per_night,
+                    nights: event.nights,
+                  }
+                : c
+            )
+          : [
+              ...cur.camps,
+              {
+                uid: uid(),
+                name: event.name,
+                fee_per_night: event.fee_per_night,
+                nights: event.nights,
+              },
+            ]
+        next[key] = { ...cur, camps }
+      }
+      return next
+    })
+    setDirty(true)
+    setBulkType(null)
+  }
+
   const handleSave = async () => {
     setSaving(true)
     try {
@@ -252,7 +324,7 @@ export default function ExpensesScreen() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Select
             value={filterGroup}
             onChange={(e) => setFilterGroup(e.target.value)}
@@ -266,6 +338,18 @@ export default function ExpensesScreen() {
             ))}
           </Select>
           <Badge variant="secondary">{filtered.length}名</Badge>
+          <span className="mx-1 hidden h-5 w-px bg-slate-200 sm:block" />
+          <Button
+            variant="secondary"
+            onClick={() => setBulkType('tournament')}
+          >
+            <Trophy className="h-4 w-4 text-amber-500" />
+            大会を一括登録
+          </Button>
+          <Button variant="secondary" onClick={() => setBulkType('camp')}>
+            <Tent className="h-4 w-4 text-emerald-500" />
+            合宿を一括登録
+          </Button>
         </div>
         <div className="flex items-center gap-2">
           {dirty && (
@@ -280,6 +364,17 @@ export default function ExpensesScreen() {
           </Button>
         </div>
       </div>
+
+      {/* 一括登録ダイアログ */}
+      {bulkType && (
+        <BulkAddDialog
+          type={bulkType}
+          members={activeMembers}
+          onClose={() => setBulkType(null)}
+          onApplyTournament={applyBulkTournament}
+          onApplyCamp={applyBulkCamp}
+        />
+      )}
 
       <Card>
         <CardContent className="p-0">
@@ -468,6 +563,292 @@ export default function ExpensesScreen() {
         参加費 − 補助 = 請求額、合宿は 1泊単価 × 泊数 = 費用 を自動計算します。
       </p>
     </div>
+  )
+}
+
+// ---- 一括登録ダイアログ ----
+function BulkAddDialog({
+  type,
+  members,
+  onClose,
+  onApplyTournament,
+  onApplyCamp,
+}) {
+  const isTournament = type === 'tournament'
+  const [name, setName] = useState('')
+  const [fee, setFee] = useState(0) // 大会:参加費 / 合宿:1泊単価
+  const [subsidy, setSubsidy] = useState(0) // 大会のみ
+  const [nights, setNights] = useState(0) // 合宿のみ
+  const [selected, setSelected] = useState(
+    () => new Set(members.map((m) => m.id))
+  )
+
+  const feeIsPreset = CAMP_PRICE_PRESETS.some((p) => p.value === num(fee))
+
+  const toggle = (id) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+  const selectAll = () => setSelected(new Set(members.map((m) => m.id)))
+  const clearAll = () => setSelected(new Set())
+  const toggleGroup = (group) => {
+    const ids = members.filter((m) => m.group === group).map((m) => m.id)
+    const allOn = ids.every((id) => selected.has(id))
+    setSelected((prev) => {
+      const next = new Set(prev)
+      for (const id of ids) {
+        if (allOn) next.delete(id)
+        else next.add(id)
+      }
+      return next
+    })
+  }
+
+  const preview = isTournament
+    ? Math.max(0, num(fee) - num(subsidy))
+    : num(fee) * num(nights)
+
+  const canApply = name.trim() !== '' && selected.size > 0
+
+  const handleApply = () => {
+    if (!canApply) return
+    const ids = Array.from(selected)
+    if (isTournament) {
+      onApplyTournament(
+        { name: name.trim(), fee: num(fee), subsidy: num(subsidy) },
+        ids
+      )
+    } else {
+      onApplyCamp(
+        { name: name.trim(), fee_per_night: num(fee), nights: num(nights) },
+        ids
+      )
+    }
+  }
+
+  const membersByGroup = GROUPS.map((group) => ({
+    group,
+    list: members.filter((m) => m.group === group),
+  })).filter((g) => g.list.length > 0)
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      maxWidth="max-w-3xl"
+      title={
+        isTournament ? '大会を一括登録' : '合宿を一括登録'
+      }
+      footer={
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-sm text-slate-500">
+            <span className="font-semibold text-slate-700">
+              {selected.size}名
+            </span>{' '}
+            を選択中 · 1人あたり{' '}
+            <span className="font-semibold text-primary">
+              {formatYen(preview)}
+            </span>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={onClose}>
+              キャンセル
+            </Button>
+            <Button onClick={handleApply} disabled={!canApply}>
+              <Users className="h-4 w-4" />
+              {selected.size}名に登録
+            </Button>
+          </div>
+        </div>
+      }
+    >
+      <div className="space-y-5">
+        {/* イベント情報 */}
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <div className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-slate-700">
+            {isTournament ? (
+              <Trophy className="h-4 w-4 text-amber-500" />
+            ) : (
+              <Tent className="h-4 w-4 text-emerald-500" />
+            )}
+            {isTournament ? '大会情報' : '合宿情報'}
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-xs font-medium text-slate-500">
+                {isTournament ? '大会名' : '合宿名'}
+              </label>
+              <Input
+                value={name}
+                autoFocus
+                placeholder={isTournament ? '〇〇大会' : '〇〇合宿'}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+            {isTournament ? (
+              <>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">
+                    参加費
+                  </label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={fee === 0 ? '' : fee}
+                    placeholder="0"
+                    onChange={(e) => setFee(num(e.target.value))}
+                    className="text-right tabular-nums"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">
+                    補助
+                  </label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={subsidy === 0 ? '' : subsidy}
+                    placeholder="0"
+                    onChange={(e) => setSubsidy(num(e.target.value))}
+                    className="text-right tabular-nums"
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">
+                    1泊単価
+                  </label>
+                  <Select
+                    value={feeIsPreset ? num(fee) : 'custom'}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      setFee(v === 'custom' ? 0 : Number(v))
+                    }}
+                  >
+                    {CAMP_PRICE_PRESETS.map((p) => (
+                      <option key={p.label} value={p.value}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </Select>
+                  {!feeIsPreset && (
+                    <Input
+                      type="number"
+                      min={0}
+                      value={fee === 0 ? '' : fee}
+                      placeholder="単価を入力"
+                      onChange={(e) => setFee(num(e.target.value))}
+                      className="mt-1 text-right tabular-nums"
+                    />
+                  )}
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">
+                    泊数
+                  </label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={nights === 0 ? '' : nights}
+                    placeholder="0"
+                    onChange={(e) => setNights(num(e.target.value))}
+                    className="text-right tabular-nums"
+                  />
+                </div>
+              </>
+            )}
+          </div>
+          <p className="mt-2 text-xs text-slate-400">
+            {isTournament
+              ? '1人あたり請求額 = 参加費 − 補助（0円未満は0円）'
+              : '1人あたり費用 = 1泊単価 × 泊数'}
+            。登録後も各メンバーの行で個別に修正・削除できます。
+          </p>
+        </div>
+
+        {/* 参加者選択 */}
+        <div>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div className="text-sm font-semibold text-slate-700">
+              参加者を選択
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {GROUPS.map((g) => {
+                const ids = members
+                  .filter((m) => m.group === g)
+                  .map((m) => m.id)
+                const allOn =
+                  ids.length > 0 && ids.every((id) => selected.has(id))
+                return (
+                  <button
+                    key={g}
+                    onClick={() => toggleGroup(g)}
+                    className={cn(
+                      'rounded-full border px-2.5 py-1 text-xs font-medium transition-colors',
+                      allOn
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
+                    )}
+                  >
+                    {g}
+                  </button>
+                )
+              })}
+              <span className="mx-1 h-4 w-px bg-slate-200" />
+              <Button size="sm" variant="ghost" onClick={selectAll}>
+                全選択
+              </Button>
+              <Button size="sm" variant="ghost" onClick={clearAll}>
+                全解除
+              </Button>
+            </div>
+          </div>
+
+          <div className="max-h-72 space-y-3 overflow-y-auto rounded-lg border border-slate-200 p-3">
+            {membersByGroup.map(({ group, list }) => (
+              <div key={group}>
+                <div className="mb-1 text-xs font-semibold text-slate-400">
+                  {group}
+                </div>
+                <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                  {list.map((m) => {
+                    const on = selected.has(m.id)
+                    return (
+                      <button
+                        key={m.id}
+                        onClick={() => toggle(m.id)}
+                        className={cn(
+                          'flex items-center gap-2 rounded-md border px-2 py-1.5 text-left text-sm transition-colors',
+                          on
+                            ? 'border-primary/30 bg-primary/5'
+                            : 'border-slate-200 bg-white hover:bg-slate-50'
+                        )}
+                      >
+                        <Checkbox checked={on} onChange={() => toggle(m.id)} />
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium text-slate-800">
+                            {m.name}
+                          </span>
+                          <span className="block text-[11px] text-slate-400">
+                            {m.rank}
+                          </span>
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </Modal>
   )
 }
 

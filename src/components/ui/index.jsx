@@ -168,3 +168,50 @@ export function Label({ className, ...props }) {
 export function Skeleton({ className }) {
   return <div className={cn('animate-pulse rounded-md bg-slate-200', className)} />
 }
+
+// Modal（簡易ダイアログ）
+export function Modal({
+  open,
+  onClose,
+  title,
+  children,
+  footer,
+  maxWidth = 'max-w-2xl',
+}) {
+  if (!open) return null
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
+      <div className="absolute inset-0 bg-slate-900/40" onClick={onClose} />
+      <div
+        className={cn(
+          'relative z-10 flex max-h-[92vh] w-full flex-col rounded-t-xl bg-white shadow-xl sm:rounded-xl',
+          maxWidth
+        )}
+      >
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+          <h3 className="text-base font-semibold text-slate-900">{title}</h3>
+          <button
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            aria-label="閉じる"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              className="h-5 w-5"
+            >
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-5">{children}</div>
+        {footer && (
+          <div className="border-t border-slate-200 px-5 py-3">{footer}</div>
+        )}
+      </div>
+    </div>
+  )
+}
