@@ -57,6 +57,15 @@ var DEFAULT_CONFIG = [
   ['base_club_fee', 3000],
 ];
 
+// ---- スプレッドシートID（任意） -----------------------------
+// 通常はスプレッドシートに紐付いたスクリプト（拡張機能 > Apps Script
+// から開いたもの）なら空のままで動作します。
+// 単独プロジェクト等で getActiveSpreadsheet() が null になる場合は、
+// 対象スプレッドシートのURL
+//   https://docs.google.com/spreadsheets/d/【この部分がID】/edit
+// をここに貼り付けてください。
+var SPREADSHEET_ID = '';
+
 // =============================================================
 // エントリポイント
 // =============================================================
@@ -330,7 +339,17 @@ function readExpenses_(yearMonth) {
 // =============================================================
 
 function getSS_() {
-  return SpreadsheetApp.getActiveSpreadsheet();
+  // 紐付いたスプレッドシートを優先
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (ss) return ss;
+  // 単独プロジェクト等では SPREADSHEET_ID から開く
+  if (SPREADSHEET_ID) {
+    return SpreadsheetApp.openById(SPREADSHEET_ID);
+  }
+  throw new Error(
+    'スプレッドシートが取得できません。スプレッドシートの「拡張機能 > Apps Script」から' +
+      '開いたスクリプトに貼り付けるか、Code.js 冒頭の SPREADSHEET_ID に対象シートのIDを設定してください。'
+  );
 }
 
 function getSheet_(name) {

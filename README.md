@@ -81,6 +81,7 @@ npm run preview
 2. `gas/Code.js` の内容を `Code.gs` に貼り付けて保存。
 3. エディタで一度 **`setupSheets`** を実行し、各シートを自動生成（初回のみ）。
    - `members` / `meal_logs` / `monthly_expenses` / `config` の 4 シートが作られ、`config` にはデフォルト単価が投入されます。
+   - **シートが作られない場合**：スクリプトがスプレッドシートに紐付いていません（[script.google.com](https://script.google.com) から単独で作成した等）。スプレッドシートの「拡張機能 > Apps Script」から開き直すか、`Code.js` 冒頭の `SPREADSHEET_ID` に対象シートの ID（URL の `/d/【ID】/edit` 部分）を設定してください。
 4. **デプロイ > 新しいデプロイ > 種類: ウェブアプリ**
    - 次のユーザーとして実行: **自分**
    - アクセスできるユーザー: **全員**
