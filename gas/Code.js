@@ -407,12 +407,56 @@ function ensureSheets_() {
 // 手動セットアップ（初回にエディタから実行）
 // =============================================================
 function setupSheets() {
+  var ss = getSS_();
+  Logger.log('操作対象スプレッドシート: ' + ss.getName());
+  Logger.log('URL: ' + ss.getUrl());
   ensureSheets_();
-  SpreadsheetApp.getActiveSpreadsheet().toast(
-    'シートを初期化しました (members / meal_logs / monthly_expenses / config)',
-    'セットアップ完了',
-    5
+  var names = ss.getSheets().map(function (s) {
+    return s.getName();
+  });
+  Logger.log('現在のシート一覧: ' + JSON.stringify(names));
+  try {
+    ss.toast(
+      'シートを初期化しました (members / meal_logs / monthly_expenses / config)',
+      'セットアップ完了',
+      5
+    );
+  } catch (e) {
+    // 単独プロジェクト等では toast が使えないため無視
+  }
+  return { url: ss.getUrl(), sheets: names };
+}
+
+// =============================================================
+// 診断用（どのスプレッドシートに書き込むかを実行ログに出力）
+// この関数を実行 → 上部メニュー「実行ログ」を確認してください。
+// =============================================================
+function diagnose() {
+  var active = SpreadsheetApp.getActiveSpreadsheet();
+  Logger.log(
+    'getActiveSpreadsheet(): ' +
+      (active ? active.getName() + ' / ' + active.getUrl() : 'null（未紐付け）')
   );
+  Logger.log('SPREADSHEET_ID 定数: ' + (SPREADSHEET_ID || '(空)'));
+
+  var ss = getSS_();
+  var before = ss.getSheets().map(function (s) {
+    return s.getName();
+  });
+  Logger.log('▼ 操作対象: ' + ss.getName());
+  Logger.log('▼ 操作対象URL（ここに作られます）: ' + ss.getUrl());
+  Logger.log('作成前のシート: ' + JSON.stringify(before));
+
+  ensureSheets_();
+
+  var after = ss.getSheets().map(function (s) {
+    return s.getName();
+  });
+  Logger.log('作成後のシート: ' + JSON.stringify(after));
+  Logger.log(
+    '===> このURLを開いてシートが増えているか確認してください: ' + ss.getUrl()
+  );
+  return { targetUrl: ss.getUrl(), before: before, after: after };
 }
 
 // =============================================================
