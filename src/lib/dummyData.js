@@ -78,7 +78,7 @@ function generateMealLogs(members, year, month) {
   return logs
 }
 
-// 指定年月分の月次経費を生成（一部メンバーのみ値を持つ）
+// 指定年月分の月次経費（治療・佐川・ウエア）を生成
 function generateExpenses(members, year, month) {
   const yearMonth = toYearMonth(year, month)
   const expenses = []
@@ -88,12 +88,11 @@ function generateExpenses(members, year, month) {
     expenses.push({
       year_month: yearMonth,
       member_id: m.id,
-      // 3人に1人が大会参加
-      tournament_fee: s % 3 === 0 ? 5000 : 0,
-      tournament_support_rate: s % 3 === 0 ? 50 : 0,
-      // 4人に1人が合宿参加
-      camp_fee_per_night: s % 4 === 0 ? 2700 : 0,
-      camp_nights: s % 4 === 0 ? 2 : 0,
+      // 大会/合宿は明細シートで管理するためここでは 0
+      tournament_fee: 0,
+      tournament_support_rate: 0,
+      camp_fee_per_night: 0,
+      camp_nights: 0,
       // 5人に1人が治療費
       medical_actual: s % 5 === 0 ? 3000 : 0,
       medical_subsidy: s % 5 === 0 ? 1000 : 0,
@@ -105,6 +104,52 @@ function generateExpenses(members, year, month) {
   return expenses
 }
 
+const TOURNAMENT_NAMES = ['春季リーグ', '関東大会', '全国選手権', '交流戦', '秋季トーナメント']
+const CAMP_NAMES = ['強化合宿', '夏季合宿', '菅平合宿', '直前合宿']
+
+// 大会明細（一部メンバーに 1〜2 件）を生成
+function generateTournamentItems(members, year, month) {
+  const yearMonth = toYearMonth(year, month)
+  const items = []
+  for (const m of members) {
+    if (!m.active) continue
+    if (m.id % 3 !== 0) continue // 3人に1人
+    const count = m.id % 6 === 0 ? 2 : 1
+    for (let i = 0; i < count; i++) {
+      const name = TOURNAMENT_NAMES[(m.id + i) % TOURNAMENT_NAMES.length]
+      const fee = 5000 + ((m.id + i) % 3) * 1000
+      const subsidy = Math.round(fee * 0.5)
+      items.push({
+        year_month: yearMonth,
+        member_id: m.id,
+        name,
+        fee,
+        subsidy,
+      })
+    }
+  }
+  return items
+}
+
+// 合宿明細（一部メンバーに 1 件）を生成
+function generateCampItems(members, year, month) {
+  const yearMonth = toYearMonth(year, month)
+  const items = []
+  for (const m of members) {
+    if (!m.active) continue
+    if (m.id % 4 !== 0) continue // 4人に1人
+    const name = CAMP_NAMES[m.id % CAMP_NAMES.length]
+    items.push({
+      year_month: yearMonth,
+      member_id: m.id,
+      name,
+      fee_per_night: 2700,
+      nights: 2 + (m.id % 2),
+    })
+  }
+  return items
+}
+
 // getInitialData 相当のダミーデータ一式を生成
 export function buildDummyInitialData(year, month) {
   const members = generateMembers()
@@ -113,6 +158,8 @@ export function buildDummyInitialData(year, month) {
     config: { ...DEFAULT_CONFIG },
     mealLogs: generateMealLogs(members, year, month),
     expenses: generateExpenses(members, year, month),
+    tournamentItems: generateTournamentItems(members, year, month),
+    campItems: generateCampItems(members, year, month),
   }
 }
 

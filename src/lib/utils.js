@@ -66,3 +66,20 @@ export function num(v) {
   const n = Number(v)
   return Number.isFinite(n) ? n : 0
 }
+
+// クライアント側の一意ID（React key / 明細行の識別用）
+let _uidSeq = 0
+export function uid() {
+  _uidSeq += 1
+  return 'x' + Date.now().toString(36) + _uidSeq.toString(36)
+}
+
+// 空の大会明細（参加費 − 補助 = 請求）
+export function emptyTournamentItem() {
+  return { uid: uid(), name: '', fee: 0, subsidy: 0 }
+}
+
+// 空の合宿明細（1泊単価 × 泊数 = 費用）
+export function emptyCampItem() {
+  return { uid: uid(), name: '', fee_per_night: 2700, nights: 0 }
+}

@@ -26,6 +26,8 @@ export function AppProvider({ children }) {
   const [config, setConfig] = useState(DEFAULT_CONFIG)
   const [mealLogs, setMealLogs] = useState([])
   const [expenses, setExpenses] = useState([])
+  const [tournamentItems, setTournamentItems] = useState([])
+  const [campItems, setCampItems] = useState([])
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -47,6 +49,8 @@ export function AppProvider({ children }) {
       setConfig({ ...DEFAULT_CONFIG, ...(data.config || {}) })
       setMealLogs(data.mealLogs || [])
       setExpenses(data.expenses || [])
+      setTournamentItems(data.tournamentItems || [])
+      setCampItems(data.campItems || [])
     } catch (e) {
       console.error(e)
       setError(e.message || 'データの取得に失敗しました')
@@ -87,13 +91,27 @@ export function AppProvider({ children }) {
     [yearMonth, showToast]
   )
 
+  // payload: { expenses, tournamentItems, campItems }
   const saveExpenses = useCallback(
-    async (next) => {
-      await api.saveExpenses(yearMonth, next)
-      setExpenses((prev) => {
-        const others = prev.filter((e) => e.year_month !== yearMonth)
-        return [...others, ...next]
-      })
+    async (payload) => {
+      await api.saveExpenses(yearMonth, payload)
+      const {
+        expenses: nextExpenses = [],
+        tournamentItems: nextTournaments = [],
+        campItems: nextCamps = [],
+      } = payload
+      setExpenses((prev) => [
+        ...prev.filter((e) => e.year_month !== yearMonth),
+        ...nextExpenses,
+      ])
+      setTournamentItems((prev) => [
+        ...prev.filter((i) => i.year_month !== yearMonth),
+        ...nextTournaments,
+      ])
+      setCampItems((prev) => [
+        ...prev.filter((i) => i.year_month !== yearMonth),
+        ...nextCamps,
+      ])
       showToast('月次経費を保存しました')
     },
     [yearMonth, showToast]
@@ -109,6 +127,8 @@ export function AppProvider({ children }) {
     config,
     mealLogs,
     expenses,
+    tournamentItems,
+    campItems,
     loading,
     error,
     toast,

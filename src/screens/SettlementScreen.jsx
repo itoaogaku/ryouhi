@@ -1,5 +1,15 @@
 import React, { useState, useMemo, useRef } from 'react'
-import { FileDown, Loader2, TrendingUp, Users, Wallet } from 'lucide-react'
+import {
+  FileDown,
+  Loader2,
+  TrendingUp,
+  Users,
+  Wallet,
+  ChevronDown,
+  ChevronRight,
+  Trophy,
+  Tent,
+} from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { GROUPS } from '../lib/constants.js'
 import {
@@ -24,6 +34,8 @@ export default function SettlementScreen() {
   const {
     members,
     expenses,
+    tournamentItems,
+    campItems,
     mealLogs,
     config,
     year,
@@ -34,6 +46,7 @@ export default function SettlementScreen() {
   } = useApp()
   const [filterGroup, setFilterGroup] = useState('all')
   const [generating, setGenerating] = useState(false)
+  const [expanded, setExpanded] = useState(() => new Set())
   const sheetsRef = useRef(null)
 
   const rows = useMemo(
@@ -41,12 +54,23 @@ export default function SettlementScreen() {
       buildSettlementRows({
         members,
         expenses,
+        tournamentItems,
+        campItems,
         mealLogs,
         config,
         yearMonth,
       }),
-    [members, expenses, mealLogs, config, yearMonth]
+    [members, expenses, tournamentItems, campItems, mealLogs, config, yearMonth]
   )
+
+  const toggleExpand = (id) => {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   const grouped = useMemo(
     () => groupSettlementRows(rows, GROUPS),
@@ -162,6 +186,7 @@ export default function SettlementScreen() {
             <table className="w-full min-w-[980px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-xs font-medium text-slate-500">
+                  <th className="w-8 px-2 py-2.5"></th>
                   <th className="px-3 py-2.5 text-left">氏名</th>
                   <th className="px-3 py-2.5 text-left">グループ</th>
                   <th className="px-3 py-2.5 text-left">ランク</th>
@@ -178,52 +203,91 @@ export default function SettlementScreen() {
                 </tr>
               </thead>
               <tbody>
-                {displayRows.map((r, i) => (
-                  <tr
-                    key={r.memberId}
-                    className={cn(
-                      'border-b border-slate-100 hover:bg-slate-50/60',
-                      i % 2 === 1 && 'bg-slate-50/30'
-                    )}
-                  >
-                    <td className="px-3 py-2 font-medium text-slate-800">
-                      {r.name}
-                    </td>
-                    <td className="px-3 py-2 text-slate-500">{r.group}</td>
-                    <td className="px-3 py-2 text-slate-500">{r.rank}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">
-                      {formatYen(r.clubFee)}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums">
-                      <span>{formatYen(r.mealFee)}</span>
-                      <span className="ml-1 text-[11px] text-slate-400">
-                        (朝{r.breakfastCount}/夕{r.dinnerCount})
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-slate-600">
-                      {r.tournament ? formatYen(r.tournament) : '—'}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-slate-600">
-                      {r.camp ? formatYen(r.camp) : '—'}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-slate-600">
-                      {r.medical ? formatYen(r.medical) : '—'}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-slate-600">
-                      {r.sagawa ? formatYen(r.sagawa) : '—'}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-slate-600">
-                      {r.wear ? formatYen(r.wear) : '—'}
-                    </td>
-                    <td className="px-3 py-2 text-right font-semibold tabular-nums text-primary">
-                      {formatYen(r.total)}
-                    </td>
-                  </tr>
-                ))}
+                {displayRows.map((r, i) => {
+                  const hasDetail =
+                    r.tournamentRows.length > 0 || r.campRows.length > 0
+                  const isOpen = expanded.has(r.memberId)
+                  return (
+                    <React.Fragment key={r.memberId}>
+                      <tr
+                        className={cn(
+                          'border-b border-slate-100 hover:bg-slate-50/60',
+                          i % 2 === 1 && 'bg-slate-50/30',
+                          isOpen && 'bg-blue-50/40'
+                        )}
+                      >
+                        <td className="px-2 py-2">
+                          {hasDetail ? (
+                            <button
+                              onClick={() => toggleExpand(r.memberId)}
+                              className="flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:bg-slate-200 hover:text-slate-700"
+                              aria-label="内訳を開閉"
+                            >
+                              {isOpen ? (
+                                <ChevronDown className="h-4 w-4" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4" />
+                              )}
+                            </button>
+                          ) : null}
+                        </td>
+                        <td className="px-3 py-2 font-medium text-slate-800">
+                          {r.name}
+                        </td>
+                        <td className="px-3 py-2 text-slate-500">{r.group}</td>
+                        <td className="px-3 py-2 text-slate-500">{r.rank}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {formatYen(r.clubFee)}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          <span>{formatYen(r.mealFee)}</span>
+                          <span className="ml-1 text-[11px] text-slate-400">
+                            (朝{r.breakfastCount}/夕{r.dinnerCount})
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-slate-600">
+                          {r.tournament ? formatYen(r.tournament) : '—'}
+                          {r.tournamentRows.length > 0 && (
+                            <span className="ml-1 text-[11px] text-slate-400">
+                              ({r.tournamentRows.length})
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-slate-600">
+                          {r.camp ? formatYen(r.camp) : '—'}
+                          {r.campRows.length > 0 && (
+                            <span className="ml-1 text-[11px] text-slate-400">
+                              ({r.campRows.length})
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-slate-600">
+                          {r.medical ? formatYen(r.medical) : '—'}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-slate-600">
+                          {r.sagawa ? formatYen(r.sagawa) : '—'}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-slate-600">
+                          {r.wear ? formatYen(r.wear) : '—'}
+                        </td>
+                        <td className="px-3 py-2 text-right font-semibold tabular-nums text-primary">
+                          {formatYen(r.total)}
+                        </td>
+                      </tr>
+                      {isOpen && hasDetail && (
+                        <tr className="border-b border-slate-200 bg-slate-50/70">
+                          <td colSpan={12} className="px-4 py-3">
+                            <BreakdownDetail row={r} />
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  )
+                })}
                 {displayRows.length === 0 && (
                   <tr>
                     <td
-                      colSpan={11}
+                      colSpan={12}
                       className="px-4 py-10 text-center text-sm text-muted-foreground"
                     >
                       対象データがありません
@@ -237,9 +301,10 @@ export default function SettlementScreen() {
       </Card>
 
       <p className="text-xs text-muted-foreground">
-        合計請求額 = 部費 + 大会費×(1−補助率) + 合宿単価×泊数 + (治療費実費−補助金) +
-        佐川代 + ウエア代 + 食費(朝×{formatYen(config.breakfast_price)} + 夕×
-        {formatYen(config.dinner_price)})
+        合計請求額 = 部費 + 大会費(各: 参加費−補助) + 合宿費(各: 単価×泊数) +
+        (治療費実費−補助金) + 佐川代 + ウエア代 + 食費(朝×
+        {formatYen(config.breakfast_price)} + 夕×{formatYen(config.dinner_price)})
+        ／ ▶ をクリックすると大会・合宿の明細を確認できます。
       </p>
 
       {/* PDF描画用オフスクリーン要素（グループごと1ページ） */}
@@ -256,6 +321,105 @@ export default function SettlementScreen() {
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+// 大会・合宿の明細（画面D 展開時）
+function BreakdownDetail({ row }) {
+  return (
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {/* 大会明細 */}
+      {row.tournamentRows.length > 0 && (
+        <div className="rounded-lg border border-slate-200 bg-white p-3">
+          <div className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-slate-700">
+            <Trophy className="h-4 w-4 text-amber-500" />
+            大会明細
+          </div>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-[10px] text-slate-400">
+                <th className="py-1 text-left">大会名</th>
+                <th className="py-1 text-right">参加費</th>
+                <th className="py-1 text-right">補助</th>
+                <th className="py-1 text-right">請求額</th>
+              </tr>
+            </thead>
+            <tbody>
+              {row.tournamentRows.map((t, idx) => (
+                <tr key={idx} className="border-t border-slate-100">
+                  <td className="py-1 font-medium text-slate-700">{t.name}</td>
+                  <td className="py-1 text-right tabular-nums text-slate-500">
+                    {formatYen(t.fee)}
+                  </td>
+                  <td className="py-1 text-right tabular-nums text-slate-500">
+                    −{formatYen(t.subsidy)}
+                  </td>
+                  <td className="py-1 text-right font-semibold tabular-nums text-primary">
+                    {formatYen(t.net)}
+                  </td>
+                </tr>
+              ))}
+              <tr className="border-t border-slate-200 font-semibold">
+                <td className="py-1 text-slate-600">小計</td>
+                <td className="py-1 text-right tabular-nums text-slate-400">
+                  {formatYen(row.tournamentGross)}
+                </td>
+                <td className="py-1 text-right tabular-nums text-slate-400">
+                  −{formatYen(row.tournamentSubsidy)}
+                </td>
+                <td className="py-1 text-right tabular-nums text-primary">
+                  {formatYen(row.tournament)}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* 合宿明細 */}
+      {row.campRows.length > 0 && (
+        <div className="rounded-lg border border-slate-200 bg-white p-3">
+          <div className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-slate-700">
+            <Tent className="h-4 w-4 text-emerald-500" />
+            合宿明細
+          </div>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-[10px] text-slate-400">
+                <th className="py-1 text-left">合宿名</th>
+                <th className="py-1 text-right">1泊単価</th>
+                <th className="py-1 text-right">泊数</th>
+                <th className="py-1 text-right">費用</th>
+              </tr>
+            </thead>
+            <tbody>
+              {row.campRows.map((c, idx) => (
+                <tr key={idx} className="border-t border-slate-100">
+                  <td className="py-1 font-medium text-slate-700">{c.name}</td>
+                  <td className="py-1 text-right tabular-nums text-slate-500">
+                    {formatYen(c.perNight)}
+                  </td>
+                  <td className="py-1 text-right tabular-nums text-slate-500">
+                    {c.nights}泊
+                  </td>
+                  <td className="py-1 text-right font-semibold tabular-nums text-emerald-600">
+                    {formatYen(c.cost)}
+                  </td>
+                </tr>
+              ))}
+              <tr className="border-t border-slate-200 font-semibold">
+                <td className="py-1 text-slate-600" colSpan={3}>
+                  小計
+                </td>
+                <td className="py-1 text-right tabular-nums text-emerald-600">
+                  {formatYen(row.camp)}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }

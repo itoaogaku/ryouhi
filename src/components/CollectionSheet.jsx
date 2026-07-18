@@ -136,10 +136,13 @@ export default function CollectionSheet({ group, rows, year, month, config }) {
         </tfoot>
       </table>
 
+      {/* 大会・合宿 明細（対象者のみ） */}
+      <BreakdownSection rows={rows} />
+
       {/* フッター（集金係記入欄） */}
       <div
         style={{
-          marginTop: 24,
+          marginTop: 20,
           display: 'flex',
           justifyContent: 'space-between',
           fontSize: 11,
@@ -154,8 +157,94 @@ export default function CollectionSheet({ group, rows, year, month, config }) {
         </div>
       </div>
       <div style={{ marginTop: 10, fontSize: 9, color: '#94a3b8' }}>
-        ※ 治療費は「実費 − チーム補助金」、大会費は補助率適用後の金額です。領収欄は集金確認用のチェック欄です。
+        ※ 大会費は「参加費 − 補助 = 請求額」、合宿費は「1泊単価 × 泊数」、治療費は「実費 − チーム補助金」です。領収欄は集金確認用のチェック欄です。
       </div>
+    </div>
+  )
+}
+
+// 大会・合宿の明細（名前・金額つき）。対象者がいなければ非表示。
+function BreakdownSection({ rows }) {
+  const withTournament = rows.filter((r) => r.tournamentRows.length > 0)
+  const withCamp = rows.filter((r) => r.campRows.length > 0)
+  if (withTournament.length === 0 && withCamp.length === 0) return null
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div
+        style={{
+          fontSize: 12,
+          fontWeight: 700,
+          color: '#1e40af',
+          borderBottom: '1.5px solid #bfdbfe',
+          paddingBottom: 3,
+          marginBottom: 6,
+        }}
+      >
+        大会・合宿 明細
+      </div>
+
+      {withTournament.length > 0 && (
+        <div style={{ marginBottom: withCamp.length > 0 ? 8 : 0 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: '#b45309', marginBottom: 3 }}>
+            ● 大会（参加費 − 補助 = 請求額）
+          </div>
+          {withTournament.map((r) => (
+            <div
+              key={r.memberId}
+              style={{
+                fontSize: 9.5,
+                color: '#334155',
+                padding: '2px 0',
+                borderBottom: '1px dotted #e2e8f0',
+                lineHeight: 1.5,
+              }}
+            >
+              <span style={{ fontWeight: 700 }}>{r.name}</span>：{' '}
+              {r.tournamentRows.map((t, i) => (
+                <span key={i}>
+                  {i > 0 && '／ '}
+                  {t.name} 参加{formatYen(t.fee)}・補助{formatYen(t.subsidy)}→
+                  <span style={{ fontWeight: 700, color: '#2563eb' }}>
+                    請求{formatYen(t.net)}
+                  </span>{' '}
+                </span>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {withCamp.length > 0 && (
+        <div>
+          <div style={{ fontSize: 10, fontWeight: 700, color: '#047857', marginBottom: 3 }}>
+            ● 合宿（1泊単価 × 泊数 = 費用）
+          </div>
+          {withCamp.map((r) => (
+            <div
+              key={r.memberId}
+              style={{
+                fontSize: 9.5,
+                color: '#334155',
+                padding: '2px 0',
+                borderBottom: '1px dotted #e2e8f0',
+                lineHeight: 1.5,
+              }}
+            >
+              <span style={{ fontWeight: 700 }}>{r.name}</span>：{' '}
+              {r.campRows.map((c, i) => (
+                <span key={i}>
+                  {i > 0 && '／ '}
+                  {c.name} {formatYen(c.perNight)}×{c.nights}泊=
+                  <span style={{ fontWeight: 700, color: '#047857' }}>
+                    {formatYen(c.cost)}
+                  </span>{' '}
+                </span>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

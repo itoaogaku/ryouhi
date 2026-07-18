@@ -91,15 +91,34 @@ export async function saveMealLogs(yearMonth, logs) {
 }
 
 // 月次経費一括保存（UPSERT）
-export async function saveExpenses(yearMonth, expenses) {
+// payload: { expenses, tournamentItems, campItems }
+export async function saveExpenses(yearMonth, payload) {
+  const expenses = payload.expenses || []
+  const tournamentItems = payload.tournamentItems || []
+  const campItems = payload.campItems || []
   if (USE_DUMMY) {
     await delay(150)
-    if (dummyStore.loaded[yearMonth]) {
-      dummyStore.loaded[yearMonth].expenses = structuredCloneSafe(expenses)
+    const store = dummyStore.loaded[yearMonth]
+    if (store) {
+      store.expenses = structuredCloneSafe(expenses)
+      // 明細は当月分を総入れ替え、他月分は温存
+      store.tournamentItems = [
+        ...(store.tournamentItems || []).filter((i) => i.year_month !== yearMonth),
+        ...structuredCloneSafe(tournamentItems),
+      ]
+      store.campItems = [
+        ...(store.campItems || []).filter((i) => i.year_month !== yearMonth),
+        ...structuredCloneSafe(campItems),
+      ]
     }
     return { saved: expenses.length }
   }
-  return apiPost('saveExpenses', { year_month: yearMonth, expenses })
+  return apiPost('saveExpenses', {
+    year_month: yearMonth,
+    expenses,
+    tournamentItems,
+    campItems,
+  })
 }
 
 // -------------------------------------------------------------

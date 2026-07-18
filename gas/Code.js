@@ -45,6 +45,14 @@ var SHEETS = {
       'wear_fee',
     ],
   },
+  tournament_items: {
+    name: 'tournament_items',
+    headers: ['year_month', 'member_id', 'name', 'fee', 'subsidy'],
+  },
+  camp_items: {
+    name: 'camp_items',
+    headers: ['year_month', 'member_id', 'name', 'fee_per_night', 'nights'],
+  },
   config: {
     name: 'config',
     headers: ['key', 'value'],
@@ -109,7 +117,12 @@ function handleRequest(e, method) {
         data = saveMealLogs(params.year_month, params.logs);
         break;
       case 'saveExpenses':
-        data = saveExpenses(params.year_month, params.expenses);
+        data = saveExpenses(
+          params.year_month,
+          params.expenses,
+          params.tournamentItems,
+          params.campItems
+        );
         break;
       case 'ping':
         data = { ok: true, time: new Date().toISOString() };
@@ -142,11 +155,15 @@ function getInitialData(yearMonth) {
   var config = readConfig_();
   var mealLogs = readMealLogs_(yearMonth);
   var expenses = readExpenses_(yearMonth);
+  var tournamentItems = readTournamentItems_(yearMonth);
+  var campItems = readCampItems_(yearMonth);
   return {
     members: members,
     config: config,
     mealLogs: mealLogs,
     expenses: expenses,
+    tournamentItems: tournamentItems,
+    campItems: campItems,
   };
 }
 
@@ -212,9 +229,14 @@ function saveMealLogs(yearMonth, logs) {
 }
 
 // 月次経費 UPSERT（key: year_month + member_id）
-function saveExpenses(yearMonth, expenses) {
+// 大会・合宿の明細は「当月分を総入れ替え」で保存します。
+function saveExpenses(yearMonth, expenses, tournamentItems, campItems) {
   ensureSheets_();
   expenses = expenses || [];
+  tournamentItems = tournamentItems || [];
+  campItems = campItems || [];
+
+  // --- monthly_expenses（治療/佐川/ウエア）を UPSERT ---
   var sheet = getSheet_(SHEETS.monthly_expenses.name);
   var headers = SHEETS.monthly_expenses.headers;
   var values = getBody_(sheet);
@@ -251,7 +273,64 @@ function saveExpenses(yearMonth, expenses) {
   if (out.length) {
     sheet.getRange(2, 1, out.length, headers.length).setValues(out);
   }
-  return { saved: expenses.length, total: out.length };
+
+  // --- 大会明細：当月分を総入れ替え ---
+  replaceMonthItems_(
+    SHEETS.tournament_items,
+    yearMonth,
+    tournamentItems.map(function (t) {
+      return [
+        String(t.year_month || yearMonth),
+        Number(t.member_id),
+        String(t.name || '大会'),
+        num_(t.fee),
+        num_(t.subsidy),
+      ];
+    })
+  );
+
+  // --- 合宿明細：当月分を総入れ替え ---
+  replaceMonthItems_(
+    SHEETS.camp_items,
+    yearMonth,
+    campItems.map(function (c) {
+      return [
+        String(c.year_month || yearMonth),
+        Number(c.member_id),
+        String(c.name || '合宿'),
+        num_(c.fee_per_night),
+        num_(c.nights),
+      ];
+    })
+  );
+
+  return {
+    saved: expenses.length,
+    tournamentItems: tournamentItems.length,
+    campItems: campItems.length,
+  };
+}
+
+// 指定シートの「当月(year_month)分」を削除し、新しい行に置き換える
+function replaceMonthItems_(sheetDef, yearMonth, newRows) {
+  var sheet = getSheet_(sheetDef.name);
+  var headers = sheetDef.headers;
+  var values = getBody_(sheet);
+
+  // 他月の行は温存
+  var kept = [];
+  for (var i = 0; i < values.length; i++) {
+    var row = values[i];
+    if (row[0] === '' && row[1] === '') continue;
+    if (String(row[0]) === String(yearMonth)) continue; // 当月は破棄
+    kept.push(row.slice(0, headers.length));
+  }
+
+  var out = kept.concat(newRows);
+  clearBody_(sheet);
+  if (out.length) {
+    sheet.getRange(2, 1, out.length, headers.length).setValues(out);
+  }
 }
 
 // =============================================================
@@ -329,6 +408,44 @@ function readExpenses_(yearMonth) {
       medical_subsidy: num_(r[7]),
       sagawa_fee: num_(r[8]),
       wear_fee: num_(r[9]),
+    });
+  }
+  return out;
+}
+
+function readTournamentItems_(yearMonth) {
+  var sheet = getSheet_(SHEETS.tournament_items.name);
+  var values = getBody_(sheet);
+  var out = [];
+  for (var i = 0; i < values.length; i++) {
+    var r = values[i];
+    if (r[0] === '' && r[1] === '') continue;
+    if (yearMonth && String(r[0]) !== yearMonth) continue;
+    out.push({
+      year_month: String(r[0]),
+      member_id: Number(r[1]),
+      name: String(r[2]),
+      fee: num_(r[3]),
+      subsidy: num_(r[4]),
+    });
+  }
+  return out;
+}
+
+function readCampItems_(yearMonth) {
+  var sheet = getSheet_(SHEETS.camp_items.name);
+  var values = getBody_(sheet);
+  var out = [];
+  for (var i = 0; i < values.length; i++) {
+    var r = values[i];
+    if (r[0] === '' && r[1] === '') continue;
+    if (yearMonth && String(r[0]) !== yearMonth) continue;
+    out.push({
+      year_month: String(r[0]),
+      member_id: Number(r[1]),
+      name: String(r[2]),
+      fee_per_night: num_(r[3]),
+      nights: num_(r[4]),
     });
   }
   return out;
