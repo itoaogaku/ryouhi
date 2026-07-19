@@ -33,7 +33,8 @@ import {
 
 // 画面B：日別・月別 食数管理（寮ごと）
 // dorm: '1寮' | '2寮' — その寮の食数を管理
-export default function MealLogsScreen({ dorm }) {
+// showGuests: 見学高校生の食数欄を表示するか（2寮は高校生が泊まらないため非表示）
+export default function MealLogsScreen({ dorm, showGuests = true }) {
   const { year, month, members, mealLogs, guestMeals, loading, saveMealLogs } =
     useApp()
 
@@ -176,19 +177,22 @@ export default function MealLogsScreen({ dorm }) {
           dinner: !!v.dinner,
         }
       })
-      // 見学高校生（学校名または氏名ありのみ保存）
-      const guests = guestDraft
-        .filter(
-          (g) => (g.name || '').trim() !== '' || (g.school || '').trim() !== ''
-        )
-        .map((g) => ({
-          date: dateStr,
-          dorm,
-          school: (g.school || '').trim(),
-          name: (g.name || '').trim(),
-          breakfast: !!g.breakfast,
-          dinner: !!g.dinner,
-        }))
+      // 見学高校生（学校名または氏名ありのみ保存）。非表示の寮は空配列
+      const guests = showGuests
+        ? guestDraft
+            .filter(
+              (g) =>
+                (g.name || '').trim() !== '' || (g.school || '').trim() !== ''
+            )
+            .map((g) => ({
+              date: dateStr,
+              dorm,
+              school: (g.school || '').trim(),
+              name: (g.name || '').trim(),
+              breakfast: !!g.breakfast,
+              dinner: !!g.dinner,
+            }))
+        : []
       await saveMealLogs(logs, guests, dateStr, dorm)
       setDirty(false)
     } finally {
@@ -417,7 +421,8 @@ export default function MealLogsScreen({ dorm }) {
         </CardContent>
       </Card>
 
-      {/* 見学高校生の食数 */}
+      {/* 見学高校生の食数（2寮など高校生が泊まらない寮では非表示） */}
+      {showGuests && (
       <Card>
         <CardContent className="p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -492,10 +497,11 @@ export default function MealLogsScreen({ dorm }) {
           )}
         </CardContent>
       </Card>
+      )}
 
       <p className="text-xs text-muted-foreground">
-        ※チェックの有無を当日の食数として一括保存します（メンバー: UPSERT、見学高校生:
-        当日分を入れ替え）。上部の「一括保存」ボタンで高校生分も同時に保存されます。
+        ※チェックの有無を当日の食数として一括保存します（メンバー: UPSERT
+        {showGuests && '、見学高校生: 当日分を入れ替え'}）。上部の「一括保存」ボタンで保存されます。
       </p>
     </div>
   )
