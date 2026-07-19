@@ -87,14 +87,44 @@ npm run preview
    - アクセスできるユーザー: **全員**
 5. 発行された `/exec` で終わる URL を、フロントの `VITE_GAS_API_URL` に設定。
 
+### ログイン管理（認証）
+
+情報漏洩を防ぐため、**登録済みの「メールアドレス + PIN」を持つ人だけ**がシステムにアクセスできます。PIN は平文では保存せず、ユーザーごとのソルトとサーバー側のみが知るペッパーを混ぜた SHA-256 ハッシュのみを `users` シートに保存します。
+
+1. `setupSheets` 実行時に `users`（アカウント一覧）と `sessions`（ログイン中のセッション）シートが自動作成されます。
+2. **最初の管理者アカウントを作成**（GASエディタから手動で1回だけ実行）
+   - `gas/Code.js` 内の `createInitialAdmin_RUN_ME` 関数を開き、名前・メールアドレス・PIN（4〜8桁の数字）を書き換える
+     ```js
+     function createInitialAdmin_RUN_ME() {
+       createInitialAdmin('あなたの名前', 'you@example.com', '123456');
+     }
+     ```
+   - 関数選択を `createInitialAdmin_RUN_ME` にして実行（初回は権限の許可が必要）
+   - 実行後、この関数の中身は削除して構いません（PINは実行時にハッシュ化されて保存されるため、コードにPINを残さないため）
+3. フロントのログイン画面で、上記のメールアドレス・PINでログイン
+4. ログイン後、**「アカウント管理」タブ**から他のメンバーを追加し、追加した相手の「PIN設定」で初期PINを発行して伝える
+
+セキュリティ面の補足:
+- ログイン失敗が続くと、そのメールアドレスは一定時間ロックされます（総当たり対策）。
+- セッション（ログイン状態）は30日で自動的に失効します。再ログインが必要です。
+- アカウントを「無効」にすると、そのアカウントは次のアクセスから即座にログインできなくなります。
+
 ### API（`action` パラメータで振り分け）
 
 | action | メソッド | 内容 |
 | ------ | -------- | ---- |
+| `login` | POST | メールアドレス + PIN でログインし、セッショントークンを発行。|
+| `logout` | POST | ログアウト（セッション破棄）。|
+| `whoami` | GET | セッショントークンを検証し、現在のユーザー情報を取得。|
+| `getAccounts` | GET | ログイン可能な人の一覧を取得（PINは含まない）。|
+| `saveAccounts` | POST | ログイン可能な人の一覧を更新（全置換、PINは維持）。|
+| `setAccountPin` | POST | 指定メールアドレスのPINを新規設定・再設定。|
 | `getInitialData` | GET | マスタ・設定・指定年月の食費/経費を一括取得。|
 | `saveMembers` | POST | メンバーマスタの更新（全置換）。|
 | `saveMealLogs` | POST | 食数データの一括保存（UPSERT）。|
 | `saveExpenses` | POST | 月次経費データの一括保存（UPSERT）。|
+
+`login` 以外の全 action は有効なセッショントークン（`token` パラメータ）が必須です。未ログイン・期限切れの場合は `code: "auth_required"` のエラーが返り、フロントは自動的にログイン画面へ戻ります。
 
 - CORS プリフライトを避けるため、POST は `Content-Type: text/plain` で JSON を送信し、GAS 側で `JSON.parse` します。レスポンスは `ContentService` の JSON。
 - 高速化のため、書き込みは `setValues` による一括処理を徹底しています。
@@ -107,6 +137,8 @@ npm run preview
 | `meal_logs` | `date` (YYYY-MM-DD), `member_id`, `breakfast`, `dinner` |
 | `monthly_expenses` | `year_month` (YYYY-MM), `member_id`, `tournament_fee`, `tournament_support_rate`, `camp_fee_per_night`, `camp_nights`, `medical_actual`, `medical_subsidy`, `sagawa_fee`, `wear_fee` |
 | `config` | `key`, `value`（例: `breakfast_price`=400, `dinner_price`=600, `base_club_fee`=3000）|
+| `users` | `id`, `name`, `email`, `pin_hash`, `pin_salt`, `active`, `created_at`（PINはハッシュのみ保存）|
+| `sessions` | `token`, `user_id`, `email`, `created_at`, `expires_at` |
 
 ---
 

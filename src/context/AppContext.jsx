@@ -17,7 +17,9 @@ export function useApp() {
   return ctx
 }
 
-export function AppProvider({ children }) {
+// onAuthError: セッション切れ（auth_required）を検知したときに呼ばれる。
+// ログイン画面へ戻すために AuthContext の logout を渡す想定。
+export function AppProvider({ children, onAuthError }) {
   const now = new Date()
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
@@ -42,6 +44,14 @@ export function AppProvider({ children }) {
     setTimeout(() => setToast(null), 3000)
   }, [])
 
+  // セッション切れを検知したら、呼び出し元にログイン画面へ戻すよう通知する
+  const checkAuthError = useCallback(
+    (e) => {
+      if (e && e.code === 'auth_required' && onAuthError) onAuthError()
+    },
+    [onAuthError]
+  )
+
   const reload = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -57,11 +67,12 @@ export function AppProvider({ children }) {
       setOtherItems(data.otherItems || [])
     } catch (e) {
       console.error(e)
+      checkAuthError(e)
       setError(e.message || 'データの取得に失敗しました')
     } finally {
       setLoading(false)
     }
-  }, [year, month, yearMonth])
+  }, [year, month, yearMonth, checkAuthError])
 
   useEffect(() => {
     reload()
@@ -70,17 +81,27 @@ export function AppProvider({ children }) {
   // 保存系アクション
   const saveMembers = useCallback(
     async (next) => {
-      await api.saveMembers(next)
+      try {
+        await api.saveMembers(next)
+      } catch (e) {
+        checkAuthError(e)
+        throw e
+      }
       setMembers(next)
       showToast('寮生マスターを保存しました')
     },
-    [showToast]
+    [showToast, checkAuthError]
   )
 
   // logs: メンバー食数（当日×寮）, guests: 見学高校生（当日×寮）, date: 対象日, dorm: 対象寮
   const saveMealLogs = useCallback(
     async (logs, guests = [], date = null, dorm = '') => {
-      await api.saveMealLogs(yearMonth, logs, guests, date, dorm)
+      try {
+        await api.saveMealLogs(yearMonth, logs, guests, date, dorm)
+      } catch (e) {
+        checkAuthError(e)
+        throw e
+      }
       // メンバー食数を UPSERT 更新（key: date+member+dorm）
       setMealLogs((prev) => {
         const key = (l) => `${l.date}__${l.member_id}__${l.dorm || ''}`
@@ -114,13 +135,18 @@ export function AppProvider({ children }) {
       }
       showToast('食数データを保存しました')
     },
-    [yearMonth, showToast]
+    [yearMonth, showToast, checkAuthError]
   )
 
   // payload: { expenses, tournamentItems, campItems, otherItems }
   const saveExpenses = useCallback(
     async (payload) => {
-      await api.saveExpenses(yearMonth, payload)
+      try {
+        await api.saveExpenses(yearMonth, payload)
+      } catch (e) {
+        checkAuthError(e)
+        throw e
+      }
       const {
         expenses: nextExpenses = [],
         tournamentItems: nextTournaments = [],
@@ -145,7 +171,7 @@ export function AppProvider({ children }) {
       ])
       showToast('月次経費を保存しました')
     },
-    [yearMonth, showToast]
+    [yearMonth, showToast, checkAuthError]
   )
 
   const value = {

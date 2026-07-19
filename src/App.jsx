@@ -6,20 +6,26 @@ import {
   FileSpreadsheet,
   Building2,
   ChefHat,
+  ShieldCheck,
+  LogOut,
+  Loader2,
 } from 'lucide-react'
-import { useApp } from './context/AppContext.jsx'
+import { useAuth } from './context/AuthContext.jsx'
+import { AppProvider, useApp } from './context/AppContext.jsx'
 import { cn } from './lib/utils.js'
 import { formatYearMonthJa } from './lib/utils.js'
 import { GUEST_CATEGORIES_BY_DORM } from './lib/constants.js'
 import MonthSelector from './components/MonthSelector.jsx'
 import Toast from './components/Toast.jsx'
-import { Badge } from './components/ui/index.jsx'
+import { Badge, Button } from './components/ui/index.jsx'
 
+import LoginScreen from './screens/LoginScreen.jsx'
 import MembersScreen from './screens/MembersScreen.jsx'
 import MealLogsScreen from './screens/MealLogsScreen.jsx'
 import ExpensesScreen from './screens/ExpensesScreen.jsx'
 import SettlementScreen from './screens/SettlementScreen.jsx'
 import KitchenSummaryScreen from './screens/KitchenSummaryScreen.jsx'
+import AccountsScreen from './screens/AccountsScreen.jsx'
 
 const TABS = [
   { id: 'members', label: '寮生マスター', icon: Users, Component: MembersScreen },
@@ -45,11 +51,36 @@ const TABS = [
   },
   { id: 'expenses', label: '月次経費', icon: Receipt, Component: ExpensesScreen },
   { id: 'settlement', label: '清算・PDF出力', icon: FileSpreadsheet, Component: SettlementScreen },
+  { id: 'accounts', label: 'アカウント管理', icon: ShieldCheck, Component: AccountsScreen },
 ]
 
+// ルート: ログイン状態に応じてログイン画面 or アプリ本体を表示する
 export default function App() {
+  const { isAuthenticated, loading, logout } = useAuth()
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return <LoginScreen />
+  }
+
+  return (
+    <AppProvider onAuthError={logout}>
+      <AppShell />
+    </AppProvider>
+  )
+}
+
+function AppShell() {
   const [active, setActive] = useState('members')
   const { year, month, usingDummy, error } = useApp()
+  const { user, logout } = useAuth()
   const activeTab = TABS.find((t) => t.id === active)
   const ActiveComponent = activeTab.Component
 
@@ -77,7 +108,18 @@ export default function App() {
                 </p>
               </div>
             </div>
-            <MonthSelector />
+            <div className="flex items-center gap-3">
+              <MonthSelector />
+              <div className="flex items-center gap-2 border-l border-slate-200 pl-3">
+                <span className="hidden text-sm text-slate-600 sm:inline">
+                  {user?.name}
+                </span>
+                <Button variant="ghost" size="sm" onClick={logout}>
+                  <LogOut className="h-3.5 w-3.5" />
+                  ログアウト
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
         {/* タブナビゲーション */}

@@ -69,6 +69,26 @@ var SHEETS = {
     name: 'config',
     headers: ['key', 'value'],
   },
+  users: {
+    // ログインできる人のマスタ。PIN は平文では保存せず、
+    // ソルト付きハッシュ（pin_hash）のみを保存します。
+    name: 'users',
+    headers: [
+      'id',
+      'name',
+      'email',
+      'pin_hash',
+      'pin_salt',
+      'active',
+      'created_at',
+    ],
+  },
+  sessions: {
+    // ログイン中のセッション。トークンには十分なランダム性があるため
+    // これ自体は機密情報ではありませんが、期限切れの掃除を行います。
+    name: 'sessions',
+    headers: ['token', 'user_id', 'email', 'created_at', 'expires_at'],
+  },
 };
 
 var DEFAULT_CONFIG = [
@@ -76,6 +96,14 @@ var DEFAULT_CONFIG = [
   ['dinner_price', 600],
   ['base_club_fee', 3000],
 ];
+
+// ---- 認証まわりの設定 ----------------------------------------
+// セッションの有効期限（ミリ秒）: 30日
+var SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
+// PIN 総当たり対策: この回数連続で失敗したらロック
+var LOGIN_MAX_ATTEMPTS = 5;
+// ロックする時間（秒）: CacheService の最大保持時間(6時間)以内
+var LOGIN_LOCKOUT_SECONDS = 15 * 60;
 
 // ---- スプレッドシートID（任意） -----------------------------
 // 通常はスプレッドシートに紐付いたスクリプト（拡張機能 > Apps Script
@@ -118,7 +146,35 @@ function handleRequest(e, method) {
     var action = params.action;
     var data;
 
+    // ログイン不要な action（それ以外は全て有効なセッションを要求）
+    var PUBLIC_ACTIONS = { login: true, ping: true };
+    var session = null;
+    if (!PUBLIC_ACTIONS[action]) {
+      session = requireAuth_(params.token);
+    }
+
     switch (action) {
+      // ---- 認証 ----
+      case 'login':
+        data = login(params.email, params.pin);
+        break;
+      case 'logout':
+        data = logout(params.token);
+        break;
+      case 'whoami':
+        data = { user: { name: session.name, email: session.email } };
+        break;
+      case 'getAccounts':
+        data = getAccounts();
+        break;
+      case 'saveAccounts':
+        data = saveAccounts(params.accounts);
+        break;
+      case 'setAccountPin':
+        data = setAccountPin(params.email, params.pin);
+        break;
+
+      // ---- データ API（認証必須） ----
       case 'getInitialData':
         data = getInitialData(params.year_month);
         break;
@@ -152,7 +208,29 @@ function handleRequest(e, method) {
 
     return jsonOutput({ status: 'ok', data: data });
   } catch (err) {
-    return jsonOutput({ status: 'error', message: String(err) });
+    var msg = String((err && err.message) || err);
+    if (msg.indexOf('AUTH_REQUIRED:') === 0) {
+      return jsonOutput({
+        status: 'error',
+        code: 'auth_required',
+        message: msg.replace('AUTH_REQUIRED:', '').trim(),
+      });
+    }
+    if (msg.indexOf('AUTH_LOCKED:') === 0) {
+      return jsonOutput({
+        status: 'error',
+        code: 'auth_locked',
+        message: msg.replace('AUTH_LOCKED:', '').trim(),
+      });
+    }
+    if (msg.indexOf('AUTH_INVALID:') === 0) {
+      return jsonOutput({
+        status: 'error',
+        code: 'auth_invalid',
+        message: msg.replace('AUTH_INVALID:', '').trim(),
+      });
+    }
+    return jsonOutput({ status: 'error', message: msg });
   }
 }
 
@@ -161,6 +239,366 @@ function jsonOutput(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(
     ContentService.MimeType.JSON
   );
+}
+
+// =============================================================
+// 認証 API 実装
+// =============================================================
+// PIN は平文で保存せず、ユーザーごとのランダムなソルトと
+// サーバー側のみが知るペッパー（Script Properties）を混ぜた
+// SHA-256 ハッシュのみを保存します。
+// 連続ログイン失敗はメールアドレス単位で一時ロックし、
+// 総当たり攻撃を防ぎます。
+// =============================================================
+
+// ログイン（メールアドレス + PIN） → セッショントークンを発行
+function login(email, pin) {
+  email = normalizeEmail_(email);
+  pin = String(pin || '');
+
+  if (!email || !pin) {
+    throw new Error('AUTH_INVALID: メールアドレスとPINを入力してください');
+  }
+  if (!/^[0-9]{4,8}$/.test(pin)) {
+    throw new Error('AUTH_INVALID: PINは4〜8桁の数字で入力してください');
+  }
+
+  var cache = CacheService.getScriptCache();
+  var lockKey = 'login_fail_' + email;
+  var attempts = Number(cache.get(lockKey) || 0);
+  if (attempts >= LOGIN_MAX_ATTEMPTS) {
+    throw new Error(
+      'AUTH_LOCKED: PINの入力に複数回失敗したため、しばらく時間をおいてから再度お試しください'
+    );
+  }
+
+  ensureSheets_();
+  var user = findUserByEmail_(email);
+  var valid = !!(
+    user &&
+    user.active &&
+    user.pin_hash &&
+    verifyPin_(pin, user.pin_salt, user.pin_hash)
+  );
+
+  if (!valid) {
+    cache.put(lockKey, String(attempts + 1), LOGIN_LOCKOUT_SECONDS);
+    throw new Error(
+      'AUTH_INVALID: メールアドレスまたはPINが正しくありません'
+    );
+  }
+
+  cache.remove(lockKey);
+  var token = createSession_(user);
+  return { token: token, name: user.name, email: user.email };
+}
+
+// ログアウト（セッション破棄）
+function logout(token) {
+  token = String(token || '');
+  if (!token) return { ok: true };
+  var sheet = getSheet_(SHEETS.sessions.name);
+  var values = getBody_(sheet);
+  var kept = [];
+  for (var i = 0; i < values.length; i++) {
+    var row = values[i];
+    if (row[0] === '') continue;
+    if (String(row[0]) === token) continue; // 削除対象
+    kept.push(row);
+  }
+  clearBody_(sheet);
+  if (kept.length) {
+    sheet
+      .getRange(2, 1, kept.length, SHEETS.sessions.headers.length)
+      .setValues(kept);
+  }
+  return { ok: true };
+}
+
+// トークンを検証し、有効なら { userId, email, name } を返す。
+// 無効・期限切れ・アカウント無効化済みの場合は AUTH_REQUIRED を throw する。
+function requireAuth_(token) {
+  ensureSheets_();
+  token = String(token || '');
+  if (!token) {
+    throw new Error('AUTH_REQUIRED: ログインが必要です');
+  }
+  var sheet = getSheet_(SHEETS.sessions.name);
+  var values = getBody_(sheet);
+  for (var i = 0; i < values.length; i++) {
+    var row = values[i];
+    if (row[0] === '') continue;
+    if (String(row[0]) !== token) continue;
+    var expires = new Date(row[4]);
+    if (expires.getTime() <= Date.now()) break;
+    var user = findUserById_(Number(row[1]));
+    if (!user || !user.active) break;
+    return { userId: user.id, email: user.email, name: user.name };
+  }
+  throw new Error('AUTH_REQUIRED: ログインが必要です');
+}
+
+// ログイン可能な人の一覧を取得（PINハッシュ等の機密情報は含めない）
+function getAccounts() {
+  ensureSheets_();
+  var sheet = getSheet_(SHEETS.users.name);
+  var values = getBody_(sheet);
+  var out = [];
+  for (var i = 0; i < values.length; i++) {
+    var r = values[i];
+    if (r[0] === '' && r[1] === '') continue;
+    out.push({
+      id: Number(r[0]),
+      name: String(r[1]),
+      email: String(r[2]),
+      active: toBool_(r[5]),
+      hasPin: String(r[3] || '') !== '',
+    });
+  }
+  return out;
+}
+
+// ログイン可能な人の一覧を全置換保存（名前・メール・在籍状態のみ）
+// PIN は id が一致する既存行から引き継ぐ（新規行は PIN 未設定のまま）。
+function saveAccounts(accounts) {
+  ensureSheets_();
+  accounts = accounts || [];
+  var sheet = getSheet_(SHEETS.users.name);
+  var headers = SHEETS.users.headers;
+  var existing = getBody_(sheet);
+
+  var pinById = {};
+  for (var i = 0; i < existing.length; i++) {
+    var row = existing[i];
+    if (row[0] === '' && row[1] === '') continue;
+    pinById[String(row[0])] = {
+      hash: row[3],
+      salt: row[4],
+      created_at: row[6],
+    };
+  }
+
+  clearBody_(sheet);
+  var rows = [];
+  for (var j = 0; j < accounts.length; j++) {
+    var a = accounts[j];
+    var prev = pinById[String(a.id)] || {};
+    rows.push([
+      Number(a.id),
+      String(a.name || ''),
+      normalizeEmail_(a.email),
+      prev.hash || '',
+      prev.salt || '',
+      toBool_(a.active),
+      prev.created_at || new Date().toISOString(),
+    ]);
+  }
+  if (rows.length) {
+    sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
+  }
+  return { saved: accounts.length };
+}
+
+// 指定メールアドレスの PIN を新規設定・再設定する
+function setAccountPin(email, pin) {
+  ensureSheets_();
+  email = normalizeEmail_(email);
+  pin = String(pin || '');
+  if (!email) {
+    throw new Error('メールアドレスを指定してください');
+  }
+  if (!/^[0-9]{4,8}$/.test(pin)) {
+    throw new Error('PINは4〜8桁の数字で入力してください');
+  }
+
+  var sheet = getSheet_(SHEETS.users.name);
+  var values = getBody_(sheet);
+  for (var i = 0; i < values.length; i++) {
+    var row = values[i];
+    if (row[0] === '' && row[1] === '') continue;
+    if (normalizeEmail_(String(row[2])) === email) {
+      var salt = generateSalt_();
+      var hash = hashPin_(pin, salt);
+      // pin_hash（4列目）・pin_salt（5列目）のみ更新
+      sheet.getRange(i + 2, 4, 1, 2).setValues([[hash, salt]]);
+      return { ok: true };
+    }
+  }
+  throw new Error('該当するアカウントが見つかりません: ' + email);
+}
+
+// =============================================================
+// 認証 helper
+// =============================================================
+
+function normalizeEmail_(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
+function findUserByEmail_(email) {
+  email = normalizeEmail_(email);
+  var sheet = getSheet_(SHEETS.users.name);
+  var values = getBody_(sheet);
+  for (var i = 0; i < values.length; i++) {
+    var r = values[i];
+    if (r[0] === '' && r[1] === '') continue;
+    if (normalizeEmail_(String(r[2])) === email) {
+      return rowToUser_(r);
+    }
+  }
+  return null;
+}
+
+function findUserById_(id) {
+  var sheet = getSheet_(SHEETS.users.name);
+  var values = getBody_(sheet);
+  for (var i = 0; i < values.length; i++) {
+    var r = values[i];
+    if (r[0] === '' && r[1] === '') continue;
+    if (Number(r[0]) === Number(id)) {
+      return rowToUser_(r);
+    }
+  }
+  return null;
+}
+
+function rowToUser_(r) {
+  return {
+    id: Number(r[0]),
+    name: String(r[1]),
+    email: String(r[2]),
+    pin_hash: String(r[3] || ''),
+    pin_salt: String(r[4] || ''),
+    active: toBool_(r[5]),
+  };
+}
+
+// セッションを1件作成し、トークンを返す
+function createSession_(user) {
+  cleanupExpiredSessions_();
+  var sheet = getSheet_(SHEETS.sessions.name);
+  var token = Utilities.getUuid() + Utilities.getUuid();
+  var now = new Date();
+  var expires = new Date(now.getTime() + SESSION_DURATION_MS);
+  sheet.appendRow([
+    token,
+    Number(user.id),
+    user.email,
+    now.toISOString(),
+    expires.toISOString(),
+  ]);
+  return token;
+}
+
+// 期限切れセッションを間引く（sessions シートの肥大化を防ぐ）
+function cleanupExpiredSessions_() {
+  var sheet = getSheet_(SHEETS.sessions.name);
+  var values = getBody_(sheet);
+  if (values.length === 0) return;
+  var now = Date.now();
+  var kept = [];
+  for (var i = 0; i < values.length; i++) {
+    var row = values[i];
+    if (row[0] === '') continue;
+    var expires = new Date(row[4]);
+    if (expires.getTime() > now) kept.push(row);
+  }
+  if (kept.length !== values.length) {
+    clearBody_(sheet);
+    if (kept.length) {
+      sheet
+        .getRange(2, 1, kept.length, SHEETS.sessions.headers.length)
+        .setValues(kept);
+    }
+  }
+}
+
+// PIN はサーバー側のみが知るペッパー（初回アクセス時に自動生成し
+// Script Properties に保存）とユーザーごとのソルトを混ぜて
+// SHA-256 でハッシュ化する。平文 PIN は一切保存しない。
+function getPinPepper_() {
+  var props = PropertiesService.getScriptProperties();
+  var pepper = props.getProperty('PIN_PEPPER');
+  if (!pepper) {
+    pepper = Utilities.getUuid() + Utilities.getUuid();
+    props.setProperty('PIN_PEPPER', pepper);
+  }
+  return pepper;
+}
+
+function generateSalt_() {
+  return Utilities.getUuid().replace(/-/g, '');
+}
+
+function hashPin_(pin, salt) {
+  var raw = salt + ':' + pin + ':' + getPinPepper_();
+  var digestBytes = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    raw,
+    Utilities.Charset.UTF_8
+  );
+  var hex = '';
+  for (var i = 0; i < digestBytes.length; i++) {
+    var v = digestBytes[i];
+    if (v < 0) v += 256;
+    var h = v.toString(16);
+    hex += h.length === 1 ? '0' + h : h;
+  }
+  return hex;
+}
+
+function verifyPin_(pin, salt, expectedHash) {
+  if (!salt || !expectedHash) return false;
+  return hashPin_(pin, salt) === expectedHash;
+}
+
+// =============================================================
+// 初回セットアップ用：最初の管理者アカウントを作成
+// =============================================================
+// 下記の名前・メールアドレス・PIN を書き換えてから
+// 関数選択で createInitialAdmin_RUN_ME を選び、実行してください。
+// 実行後、この関数の中身は削除してしまって構いません。
+function createInitialAdmin_RUN_ME() {
+  createInitialAdmin('あなたの名前', 'you@example.com', '123456');
+}
+
+function createInitialAdmin(name, email, pin) {
+  ensureSheets_();
+  name = String(name || '').trim();
+  email = normalizeEmail_(email);
+  pin = String(pin || '');
+
+  if (!name || !email) {
+    throw new Error('name と email を指定してください');
+  }
+  if (!/^[0-9]{4,8}$/.test(pin)) {
+    throw new Error('PIN は4〜8桁の数字で指定してください');
+  }
+  if (findUserByEmail_(email)) {
+    throw new Error('既に登録済みのメールアドレスです: ' + email);
+  }
+
+  var sheet = getSheet_(SHEETS.users.name);
+  var values = getBody_(sheet);
+  var maxId = 0;
+  for (var i = 0; i < values.length; i++) {
+    var id = Number(values[i][0]);
+    if (!isNaN(id) && id > maxId) maxId = id;
+  }
+
+  var salt = generateSalt_();
+  var hash = hashPin_(pin, salt);
+  sheet.appendRow([
+    maxId + 1,
+    name,
+    email,
+    hash,
+    salt,
+    true,
+    new Date().toISOString(),
+  ]);
+  Logger.log('管理者アカウントを作成しました: ' + name + ' <' + email + '>');
+  return { id: maxId + 1, name: name, email: email };
 }
 
 // =============================================================

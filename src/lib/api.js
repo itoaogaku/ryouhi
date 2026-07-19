@@ -7,12 +7,51 @@ import { buildDummyInitialData } from './dummyData.js'
 // text/plain として送信します（GAS 側で JSON.parse します）。
 // VITE_GAS_API_URL が未設定、または VITE_USE_DUMMY_DATA=true の場合は
 // ローカルのダミーデータで動作します。
+//
+// ログインが必要な action には、保存済みのセッショントークンを
+// 自動的に付与します（ログイン自体は除く）。
 // -------------------------------------------------------------
 
 const API_URL = import.meta.env.VITE_GAS_API_URL || ''
 const FORCE_DUMMY = import.meta.env.VITE_USE_DUMMY_DATA === 'true'
 
 export const USE_DUMMY = FORCE_DUMMY || !API_URL
+
+const TOKEN_STORAGE_KEY = 'ryouhi_auth_token'
+
+export function getStoredToken() {
+  try {
+    return localStorage.getItem(TOKEN_STORAGE_KEY) || ''
+  } catch (e) {
+    return ''
+  }
+}
+
+export function setStoredToken(token) {
+  try {
+    localStorage.setItem(TOKEN_STORAGE_KEY, token)
+  } catch (e) {
+    // localStorage が使えない環境ではメモリのみ（リロードで消える）
+  }
+}
+
+export function clearStoredToken() {
+  try {
+    localStorage.removeItem(TOKEN_STORAGE_KEY)
+  } catch (e) {
+    // noop
+  }
+}
+
+// API エラー（code 付き）。auth_required の場合、呼び出し側で
+// セッション切れとして再ログインを促すために使用する。
+export class ApiError extends Error {
+  constructor(message, code) {
+    super(message)
+    this.name = 'ApiError'
+    this.code = code || ''
+  }
+}
 
 // ローカルダミー用のインメモリストア（セッション内で編集を保持）
 const dummyStore = {
@@ -30,28 +69,106 @@ function getDummy(year, month, yearMonth) {
 async function apiGet(action, params = {}) {
   const url = new URL(API_URL)
   url.searchParams.set('action', action)
+  const token = getStoredToken()
+  if (token) url.searchParams.set('token', token)
   for (const [k, v] of Object.entries(params)) {
     url.searchParams.set(k, v)
   }
   const res = await fetch(url.toString(), { method: 'GET' })
-  if (!res.ok) throw new Error(`API GET ${action} 失敗: ${res.status}`)
+  if (!res.ok) throw new ApiError(`API GET ${action} 失敗: ${res.status}`)
   const json = await res.json()
-  if (json.status === 'error') throw new Error(json.message || 'API エラー')
+  if (json.status === 'error') {
+    throw new ApiError(json.message || 'API エラー', json.code)
+  }
   return json.data
 }
 
 // POST リクエスト（action + payload）
 async function apiPost(action, payload = {}) {
+  const token = getStoredToken()
   const res = await fetch(API_URL, {
     method: 'POST',
     // text/plain にすることで CORS プリフライトを回避
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ action, ...payload }),
+    body: JSON.stringify({ action, token, ...payload }),
   })
-  if (!res.ok) throw new Error(`API POST ${action} 失敗: ${res.status}`)
+  if (!res.ok) throw new ApiError(`API POST ${action} 失敗: ${res.status}`)
   const json = await res.json()
-  if (json.status === 'error') throw new Error(json.message || 'API エラー')
+  if (json.status === 'error') {
+    throw new ApiError(json.message || 'API エラー', json.code)
+  }
   return json.data
+}
+
+// -------------------------------------------------------------
+// 認証 API
+// -------------------------------------------------------------
+// ダミーモードでは実際のログインを行わず、ローカル確認用の
+// アカウント一覧をメモリ上で管理します。
+
+const dummyAuthUser = { name: 'ローカル確認用ユーザー', email: 'local@example.com' }
+let dummyAccounts = [
+  { id: 1, name: 'ローカル確認用ユーザー', email: 'local@example.com', active: true, hasPin: true },
+]
+
+// ログイン（メールアドレス + PIN）
+export async function login(email, pin) {
+  if (USE_DUMMY) {
+    await delay(200)
+    return { token: 'dummy-token', name: dummyAuthUser.name, email: dummyAuthUser.email }
+  }
+  return apiPost('login', { email, pin })
+}
+
+// ログアウト
+export async function logout() {
+  if (USE_DUMMY) {
+    await delay(100)
+    return { ok: true }
+  }
+  return apiPost('logout', {})
+}
+
+// 現在のセッションに紐づくユーザー情報を取得（トークンの検証）
+export async function whoami() {
+  if (USE_DUMMY) {
+    await delay(100)
+    return { user: dummyAuthUser }
+  }
+  return apiGet('whoami')
+}
+
+// ログイン可能な人の一覧を取得
+export async function getAccounts() {
+  if (USE_DUMMY) {
+    await delay(150)
+    return structuredCloneSafe(dummyAccounts)
+  }
+  return apiGet('getAccounts')
+}
+
+// ログイン可能な人の一覧を全置換保存
+export async function saveAccounts(accounts) {
+  if (USE_DUMMY) {
+    await delay(150)
+    dummyAccounts = structuredCloneSafe(accounts).map((a) => ({
+      ...a,
+      hasPin: dummyAccounts.find((p) => p.id === a.id)?.hasPin || false,
+    }))
+    return { saved: accounts.length }
+  }
+  return apiPost('saveAccounts', { accounts })
+}
+
+// 指定メールアドレスの PIN を新規設定・再設定
+export async function setAccountPin(email, pin) {
+  if (USE_DUMMY) {
+    await delay(150)
+    const acc = dummyAccounts.find((a) => a.email === email)
+    if (acc) acc.hasPin = true
+    return { ok: true }
+  }
+  return apiPost('setAccountPin', { email, pin })
 }
 
 // -------------------------------------------------------------
