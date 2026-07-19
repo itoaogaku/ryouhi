@@ -29,11 +29,12 @@ var SHEETS = {
   },
   meal_logs: {
     name: 'meal_logs',
-    headers: ['date', 'member_id', 'breakfast', 'dinner'],
+    // dorm（1寮/2寮）は既存データの列位置を崩さないよう末尾に追加
+    headers: ['date', 'member_id', 'breakfast', 'dinner', 'dorm'],
   },
   guest_meals: {
     name: 'guest_meals',
-    headers: ['date', 'school', 'name', 'breakfast', 'dinner'],
+    headers: ['date', 'school', 'name', 'breakfast', 'dinner', 'dorm'],
   },
   monthly_expenses: {
     name: 'monthly_expenses',
@@ -123,7 +124,8 @@ function handleRequest(e, method) {
           params.year_month,
           params.logs,
           params.guests,
-          params.date
+          params.date,
+          params.dorm
         );
         break;
       case 'saveExpenses':
@@ -203,31 +205,40 @@ function saveMembers(members) {
   return { saved: members.length };
 }
 
-// 食数ログ UPSERT（key: date + member_id）+ 見学高校生（当日分を総入れ替え）
-function saveMealLogs(yearMonth, logs, guests, date) {
+// 食数ログ UPSERT（key: date + member_id + dorm）+ 見学高校生（当日×寮を総入れ替え）
+function saveMealLogs(yearMonth, logs, guests, date, dorm) {
   ensureSheets_();
   logs = logs || [];
   guests = guests || [];
+  dorm = String(dorm || '');
   var sheet = getSheet_(SHEETS.meal_logs.name);
-  var values = getBody_(sheet); // [date, member_id, breakfast, dinner]
+  var values = getBody_(sheet); // [date, member_id, breakfast, dinner, dorm]
 
-  // 既存を Map 化
+  // 既存を Map 化（key: date + member_id + dorm）
   var map = {};
   for (var i = 0; i < values.length; i++) {
     var row = values[i];
     if (row[0] === '' && row[1] === '') continue;
-    var key = normDate_(row[0]) + '__' + String(row[1]);
-    map[key] = [normDate_(row[0]), Number(row[1]), toBool_(row[2]), toBool_(row[3])];
+    var rdorm = String(row[4] || '');
+    var key = normDate_(row[0]) + '__' + String(row[1]) + '__' + rdorm;
+    map[key] = [
+      normDate_(row[0]),
+      Number(row[1]),
+      toBool_(row[2]),
+      toBool_(row[3]),
+      rdorm,
+    ];
   }
 
   // UPSERT（朝夕どちらも false の行は削除）
   for (var j = 0; j < logs.length; j++) {
     var l = logs[j];
-    var k = normDate_(l.date) + '__' + String(l.member_id);
+    var ldorm = String(l.dorm || dorm);
+    var k = normDate_(l.date) + '__' + String(l.member_id) + '__' + ldorm;
     var bf = toBool_(l.breakfast);
     var dn = toBool_(l.dinner);
     if (bf || dn) {
-      map[k] = [normDate_(l.date), Number(l.member_id), bf, dn];
+      map[k] = [normDate_(l.date), Number(l.member_id), bf, dn, ldorm];
     } else {
       delete map[k];
     }
@@ -241,32 +252,35 @@ function saveMealLogs(yearMonth, logs, guests, date) {
     sheet.getRange(2, 1, out.length, SHEETS.meal_logs.headers.length).setValues(out);
   }
 
-  // 見学高校生：当日分を総入れ替え（date 指定時のみ）
+  // 見学高校生：当日×寮の分を総入れ替え（date 指定時のみ）
   if (date) {
-    saveGuestMeals_(normDate_(date), guests);
+    saveGuestMeals_(normDate_(date), dorm, guests);
   }
 
   return { saved: logs.length, total: out.length, guests: guests.length };
 }
 
-// 見学高校生の食数を「指定日分だけ」入れ替える
-function saveGuestMeals_(date, guests) {
+// 見学高校生の食数を「指定日 × 指定寮」の分だけ入れ替える
+function saveGuestMeals_(date, dorm, guests) {
   var sheet = getSheet_(SHEETS.guest_meals.name);
   var headers = SHEETS.guest_meals.headers;
   var values = getBody_(sheet);
+  dorm = String(dorm || '');
 
-  // 他の日の行は温存
+  // 対象の (日付, 寮) 以外の行は温存
   var kept = [];
   for (var i = 0; i < values.length; i++) {
     var row = values[i];
     if (row[0] === '' && row[2] === '' && row[1] === '') continue;
-    if (normDate_(row[0]) === date) continue; // 当日は破棄
+    var rdorm = String(row[5] || '');
+    if (normDate_(row[0]) === date && rdorm === dorm) continue; // 当日×当寮は破棄
     kept.push([
       normDate_(row[0]),
       String(row[1]),
       String(row[2]),
       toBool_(row[3]),
       toBool_(row[4]),
+      rdorm,
     ]);
   }
 
@@ -282,6 +296,7 @@ function saveGuestMeals_(date, guests) {
       name,
       toBool_(guests[g].breakfast),
       toBool_(guests[g].dinner),
+      dorm,
     ]);
   }
 
@@ -436,6 +451,7 @@ function readGuestMeals_(yearMonth) {
       name: String(r[2]),
       breakfast: toBool_(r[3]),
       dinner: toBool_(r[4]),
+      dorm: r[5] != null ? String(r[5]) : '',
     });
   }
   return out;
@@ -470,6 +486,7 @@ function readMealLogs_(yearMonth) {
       member_id: Number(r[1]),
       breakfast: toBool_(r[2]),
       dinner: toBool_(r[3]),
+      dorm: r[4] != null ? String(r[4]) : '',
     });
   }
   return out;

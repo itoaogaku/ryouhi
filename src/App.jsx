@@ -14,7 +14,20 @@ import SettlementScreen from './screens/SettlementScreen.jsx'
 
 const TABS = [
   { id: 'members', label: '寮生マスター', icon: Users, Component: MembersScreen },
-  { id: 'meals', label: '食数管理', icon: CalendarCheck, Component: MealLogsScreen },
+  {
+    id: 'meals1',
+    label: '1寮 食数',
+    icon: CalendarCheck,
+    Component: MealLogsScreen,
+    props: { dorm: '1寮' },
+  },
+  {
+    id: 'meals2',
+    label: '2寮 食数',
+    icon: CalendarCheck,
+    Component: MealLogsScreen,
+    props: { dorm: '2寮' },
+  },
   { id: 'expenses', label: '月次経費', icon: Receipt, Component: ExpensesScreen },
   { id: 'settlement', label: '清算・PDF出力', icon: FileSpreadsheet, Component: SettlementScreen },
 ]
@@ -22,7 +35,8 @@ const TABS = [
 export default function App() {
   const [active, setActive] = useState('members')
   const { year, month, usingDummy, error } = useApp()
-  const ActiveComponent = TABS.find((t) => t.id === active).Component
+  const activeTab = TABS.find((t) => t.id === active)
+  const ActiveComponent = activeTab.Component
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -84,7 +98,7 @@ export default function App() {
             {error}（ダミーデータで表示している可能性があります）
           </div>
         )}
-        <ActiveComponent />
+        <ActiveComponent key={activeTab.id} {...(activeTab.props || {})} />
       </main>
 
       <Toast />

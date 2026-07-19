@@ -8,6 +8,7 @@ import {
   Plus,
   Trash2,
   GraduationCap,
+  Home,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { RANKS, GROUPS } from '../lib/constants.js'
@@ -30,8 +31,9 @@ import {
   cn,
 } from '../lib/utils.js'
 
-// 画面B：日別・月別 食数管理
-export default function MealLogsScreen() {
+// 画面B：日別・月別 食数管理（寮ごと）
+// dorm: '1寮' | '2寮' — その寮の食数を管理
+export default function MealLogsScreen({ dorm }) {
   const { year, month, members, mealLogs, guestMeals, loading, saveMealLogs } =
     useApp()
 
@@ -43,12 +45,14 @@ export default function MealLogsScreen() {
   const [day, setDay] = useState(defaultDay)
   const [filterGroup, setFilterGroup] = useState('all')
   const [filterRank, setFilterRank] = useState('all')
+  // 表示範囲: 'home' = この寮の所属＋喫食者 / 'all' = 全寮生
+  const [scope, setScope] = useState('home')
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
 
-  // date -> member_id -> { breakfast, dinner } の編集バッファ（当日のみ）
+  // member_id -> { breakfast, dinner } の編集バッファ（当日×この寮）
   const [draft, setDraft] = useState({})
-  // 見学高校生の当日バッファ: [{ uid, name, breakfast, dinner }]
+  // 見学高校生の当日バッファ: [{ uid, school, name, breakfast, dinner }]
   const [guestDraft, setGuestDraft] = useState([])
 
   const dateStr = toDateStr(year, month, day)
@@ -59,11 +63,11 @@ export default function MealLogsScreen() {
     if (day > totalDays) setDay(totalDays)
   }, [totalDays, day])
 
-  // mealLogs / guestMeals から当日の状態を初期化
+  // mealLogs / guestMeals から当日×この寮の状態を初期化
   useEffect(() => {
     const map = {}
     for (const log of mealLogs) {
-      if (log.date === dateStr) {
+      if (log.date === dateStr && (log.dorm || '') === dorm) {
         map[String(log.member_id)] = {
           breakfast: !!log.breakfast,
           dinner: !!log.dinner,
@@ -73,7 +77,7 @@ export default function MealLogsScreen() {
     setDraft(map)
     setGuestDraft(
       guestMeals
-        .filter((g) => g.date === dateStr)
+        .filter((g) => g.date === dateStr && (g.dorm || '') === dorm)
         .map((g) => ({
           uid: uid(),
           school: g.school || '',
@@ -83,16 +87,36 @@ export default function MealLogsScreen() {
         }))
     )
     setDirty(false)
-  }, [mealLogs, guestMeals, dateStr])
+  }, [mealLogs, guestMeals, dateStr, dorm])
 
   const activeMembers = useMemo(
     () => members.filter((m) => m.active),
     [members]
   )
 
+  // この寮で当日すでに喫食記録があるメンバー（他寮所属でも表示する）
+  const ateHereIds = useMemo(() => {
+    const set = new Set()
+    for (const log of mealLogs) {
+      if (
+        log.date === dateStr &&
+        (log.dorm || '') === dorm &&
+        (log.breakfast || log.dinner)
+      ) {
+        set.add(String(log.member_id))
+      }
+    }
+    return set
+  }, [mealLogs, dateStr, dorm])
+
   const filtered = activeMembers.filter((m) => {
     if (filterGroup !== 'all' && m.group !== filterGroup) return false
     if (filterRank !== 'all' && m.rank !== filterRank) return false
+    // 表示範囲: home = この寮の所属 or この寮での喫食者、all = 全寮生
+    if (scope === 'home') {
+      const isHome = (m.dorm || '') === dorm
+      if (!isHome && !ateHereIds.has(String(m.id))) return false
+    }
     return true
   })
 
@@ -141,12 +165,13 @@ export default function MealLogsScreen() {
   const handleSave = async () => {
     setSaving(true)
     try {
-      // 全在籍メンバー分を当日分として UPSERT（未チェックは削除扱い）
+      // 全在籍メンバー分を当日×この寮として UPSERT（未チェックは削除扱い）
       const logs = activeMembers.map((m) => {
         const v = getVal(m.id)
         return {
           date: dateStr,
           member_id: m.id,
+          dorm,
           breakfast: !!v.breakfast,
           dinner: !!v.dinner,
         }
@@ -158,12 +183,13 @@ export default function MealLogsScreen() {
         )
         .map((g) => ({
           date: dateStr,
+          dorm,
           school: (g.school || '').trim(),
           name: (g.name || '').trim(),
           breakfast: !!g.breakfast,
           dinner: !!g.dinner,
         }))
-      await saveMealLogs(logs, guests, dateStr)
+      await saveMealLogs(logs, guests, dateStr, dorm)
       setDirty(false)
     } finally {
       setSaving(false)
@@ -196,6 +222,17 @@ export default function MealLogsScreen() {
 
   return (
     <div className="space-y-4">
+      {/* 寮バナー */}
+      <div className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-4 py-2">
+        <Home className="h-4 w-4 text-primary" />
+        <span className="text-sm font-semibold text-primary">
+          {dorm} の食数管理
+        </span>
+        <span className="text-xs text-muted-foreground">
+          （この寮で食べた人を記録。他寮の人が食べた場合は「全寮生」表示で追加できます）
+        </span>
+      </div>
+
       {/* 日付選択 & 集計 */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-wrap items-end gap-3">
@@ -253,6 +290,15 @@ export default function MealLogsScreen() {
               </option>
             ))}
           </Select>
+          <Select
+            value={scope}
+            onChange={(e) => setScope(e.target.value)}
+            className="w-44"
+            title="表示範囲"
+          >
+            <option value="home">{dorm}所属＋喫食者</option>
+            <option value="all">全寮生（他寮を含む）</option>
+          </Select>
         </div>
 
         <div className="flex items-center gap-2">
@@ -296,6 +342,7 @@ export default function MealLogsScreen() {
                 <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium text-slate-500">
                   <th className="w-12 px-4 py-3">ID</th>
                   <th className="px-4 py-3">氏名</th>
+                  <th className="w-24 px-4 py-3">所属寮</th>
                   <th className="w-28 px-4 py-3">ランク</th>
                   <th className="w-28 px-4 py-3">グループ</th>
                   <th className="w-24 px-4 py-3 text-center">朝食</th>
@@ -305,16 +352,33 @@ export default function MealLogsScreen() {
               <tbody>
                 {filtered.map((m) => {
                   const v = getVal(m.id)
+                  const isCrossDorm = (m.dorm || '') !== dorm
                   return (
                     <tr
                       key={m.id}
-                      className="border-b border-slate-100 hover:bg-slate-50/60"
+                      className={cn(
+                        'border-b border-slate-100 hover:bg-slate-50/60',
+                        isCrossDorm && 'bg-amber-50/50'
+                      )}
                     >
                       <td className="px-4 py-2 tabular-nums text-slate-400">
                         {m.id}
                       </td>
                       <td className="px-4 py-2 font-medium text-slate-800">
                         {m.name}
+                      </td>
+                      <td className="px-4 py-2">
+                        <span
+                          className={cn(
+                            'rounded px-1.5 py-0.5 text-xs',
+                            isCrossDorm
+                              ? 'bg-amber-100 text-amber-700'
+                              : 'text-slate-500'
+                          )}
+                        >
+                          {m.dorm || '—'}
+                          {isCrossDorm && '（他寮）'}
+                        </span>
                       </td>
                       <td className="px-4 py-2 text-slate-500">{m.rank}</td>
                       <td className="px-4 py-2 text-slate-500">{m.group}</td>
@@ -340,7 +404,7 @@ export default function MealLogsScreen() {
                 {filtered.length === 0 && (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={7}
                       className="px-4 py-10 text-center text-sm text-muted-foreground"
                     >
                       該当するメンバーがいません
@@ -359,7 +423,7 @@ export default function MealLogsScreen() {
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-700">
               <GraduationCap className="h-4 w-4 text-indigo-500" />
-              見学高校生の食数（{WEEKDAY_JA[dow]}／{month}月{day}日）
+              見学高校生の食数 · {dorm}（{month}月{day}日 {WEEKDAY_JA[dow]}）
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="default" className="gap-1">

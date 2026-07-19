@@ -60,10 +60,13 @@ function generateMealLogs(members, year, month) {
     year === today.getFullYear() && month === today.getMonth() + 1
   const lastDay = isCurrentMonth ? today.getDate() : totalDays
 
+  const otherDorm = (d) => (d === '1寮' ? '2寮' : '1寮')
+
   for (const m of members) {
     if (!m.active) continue
     // メンバーごとに擬似ランダムな喫食率
     const seed = m.id * 7
+    const homeDorm = m.dorm || '1寮'
     for (let d = 1; d <= lastDay; d++) {
       const date = toDateStr(year, month, d)
       const dow = new Date(year, month - 1, d).getDay()
@@ -73,7 +76,17 @@ function generateMealLogs(members, year, month) {
       const dinner = ((seed + d * 3) % (weekend ? 3 : 2)) !== 0
       // 全部×の日は行を作らない（データ量削減）
       if (breakfast || dinner) {
-        logs.push({ date, member_id: m.id, breakfast, dinner })
+        logs.push({ date, member_id: m.id, breakfast, dinner, dorm: homeDorm })
+      }
+      // 一部メンバーは月末付近に他寮でも喫食（寮入れ替えの過渡期を再現）
+      if (m.id % 9 === 0 && d >= 25 && dinner) {
+        logs.push({
+          date,
+          member_id: m.id,
+          breakfast: false,
+          dinner: true,
+          dorm: otherDorm(homeDorm),
+        })
       }
     }
   }
@@ -98,11 +111,12 @@ function generateGuestMeals(year, month) {
   // 数日おきに1〜2名が見学に来る想定
   for (let d = 5; d <= lastDay; d += 7) {
     const date = toDateStr(year, month, d)
+    const dorm = d % 14 === 5 ? '1寮' : '2寮'
     const a = GUEST_LIST[d % GUEST_LIST.length]
-    guests.push({ date, school: a.school, name: a.name, breakfast: false, dinner: true })
+    guests.push({ date, dorm, school: a.school, name: a.name, breakfast: false, dinner: true })
     if (d % 2 === 0) {
       const b = GUEST_LIST[(d + 1) % GUEST_LIST.length]
-      guests.push({ date, school: b.school, name: b.name, breakfast: true, dinner: true })
+      guests.push({ date, dorm, school: b.school, name: b.name, breakfast: true, dinner: true })
     }
   }
   return guests

@@ -80,18 +80,19 @@ export async function saveMembers(members) {
   return apiPost('saveMembers', { members })
 }
 
-// 食数ログ一括保存（UPSERT）+ 見学高校生の食数（当日分を総入れ替え）
-export async function saveMealLogs(yearMonth, logs, guests, date) {
+// 食数ログ一括保存（UPSERT: date+member+dorm）+ 見学高校生（当日×寮を総入れ替え）
+export async function saveMealLogs(yearMonth, logs, guests, date, dorm) {
   guests = guests || []
   if (USE_DUMMY) {
     await delay(150)
     upsertDummyMealLogs(yearMonth, logs)
-    if (date) replaceDummyGuestMeals(yearMonth, date, guests)
+    if (date) replaceDummyGuestMeals(yearMonth, date, dorm, guests)
     return { saved: logs.length }
   }
   return apiPost('saveMealLogs', {
     year_month: yearMonth,
     date: date,
+    dorm: dorm,
     logs: logs,
     guests: guests,
   })
@@ -135,7 +136,7 @@ export async function saveExpenses(yearMonth, payload) {
 function upsertDummyMealLogs(yearMonth, logs) {
   const store = dummyStore.loaded[yearMonth]
   if (!store) return
-  const key = (l) => `${l.date}__${l.member_id}`
+  const key = (l) => `${l.date}__${l.member_id}__${l.dorm || ''}`
   const map = new Map(store.mealLogs.map((l) => [key(l), l]))
   for (const l of logs) {
     if (l.breakfast || l.dinner) {
@@ -147,14 +148,18 @@ function upsertDummyMealLogs(yearMonth, logs) {
   store.mealLogs = Array.from(map.values())
 }
 
-function replaceDummyGuestMeals(yearMonth, date, guests) {
+function replaceDummyGuestMeals(yearMonth, date, dorm, guests) {
   const store = dummyStore.loaded[yearMonth]
   if (!store) return
-  const others = (store.guestMeals || []).filter((g) => g.date !== date)
+  const d = dorm || ''
+  const others = (store.guestMeals || []).filter(
+    (g) => !(g.date === date && (g.dorm || '') === d)
+  )
   const valid = guests
     .filter((g) => (g.name || '').trim() !== '' || (g.school || '').trim() !== '')
     .map((g) => ({
       date,
+      dorm: d,
       school: (g.school || '').trim(),
       name: (g.name || '').trim(),
       breakfast: !!g.breakfast,

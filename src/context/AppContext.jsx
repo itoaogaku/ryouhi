@@ -75,13 +75,13 @@ export function AppProvider({ children }) {
     [showToast]
   )
 
-  // logs: メンバー食数（当日分）, guests: 見学高校生（当日分）, date: 対象日
+  // logs: メンバー食数（当日×寮）, guests: 見学高校生（当日×寮）, date: 対象日, dorm: 対象寮
   const saveMealLogs = useCallback(
-    async (logs, guests = [], date = null) => {
-      await api.saveMealLogs(yearMonth, logs, guests, date)
-      // メンバー食数を UPSERT 更新
+    async (logs, guests = [], date = null, dorm = '') => {
+      await api.saveMealLogs(yearMonth, logs, guests, date, dorm)
+      // メンバー食数を UPSERT 更新（key: date+member+dorm）
       setMealLogs((prev) => {
-        const key = (l) => `${l.date}__${l.member_id}`
+        const key = (l) => `${l.date}__${l.member_id}__${l.dorm || ''}`
         const map = new Map(prev.map((l) => [key(l), l]))
         for (const l of logs) {
           if (l.breakfast || l.dinner) map.set(key(l), l)
@@ -89,21 +89,23 @@ export function AppProvider({ children }) {
         }
         return Array.from(map.values())
       })
-      // 見学高校生は当日分を総入れ替え
+      // 見学高校生は当日×寮を総入れ替え
       if (date) {
+        const d = dorm || ''
         const valid = guests
           .filter(
             (g) => (g.name || '').trim() !== '' || (g.school || '').trim() !== ''
           )
           .map((g) => ({
             date,
+            dorm: d,
             school: (g.school || '').trim(),
             name: (g.name || '').trim(),
             breakfast: !!g.breakfast,
             dinner: !!g.dinner,
           }))
         setGuestMeals((prev) => [
-          ...prev.filter((g) => g.date !== date),
+          ...prev.filter((g) => !(g.date === date && (g.dorm || '') === d)),
           ...valid,
         ])
       }
