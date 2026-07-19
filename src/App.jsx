@@ -1,8 +1,16 @@
 import React, { useState } from 'react'
-import { Users, CalendarCheck, Receipt, FileSpreadsheet, Building2 } from 'lucide-react'
+import {
+  Users,
+  CalendarCheck,
+  Receipt,
+  FileSpreadsheet,
+  Building2,
+  ChefHat,
+} from 'lucide-react'
 import { useApp } from './context/AppContext.jsx'
 import { cn } from './lib/utils.js'
 import { formatYearMonthJa } from './lib/utils.js'
+import { GUEST_CATEGORIES_BY_DORM } from './lib/constants.js'
 import MonthSelector from './components/MonthSelector.jsx'
 import Toast from './components/Toast.jsx'
 import { Badge } from './components/ui/index.jsx'
@@ -11,6 +19,7 @@ import MembersScreen from './screens/MembersScreen.jsx'
 import MealLogsScreen from './screens/MealLogsScreen.jsx'
 import ExpensesScreen from './screens/ExpensesScreen.jsx'
 import SettlementScreen from './screens/SettlementScreen.jsx'
+import KitchenSummaryScreen from './screens/KitchenSummaryScreen.jsx'
 
 const TABS = [
   { id: 'members', label: '寮生マスター', icon: Users, Component: MembersScreen },
@@ -19,14 +28,20 @@ const TABS = [
     label: '1寮 食数',
     icon: CalendarCheck,
     Component: MealLogsScreen,
-    props: { dorm: '1寮', showGuests: true },
+    props: { dorm: '1寮', guestCategories: GUEST_CATEGORIES_BY_DORM['1寮'] },
   },
   {
     id: 'meals2',
     label: '2寮 食数',
     icon: CalendarCheck,
     Component: MealLogsScreen,
-    props: { dorm: '2寮', showGuests: false },
+    props: { dorm: '2寮', guestCategories: GUEST_CATEGORIES_BY_DORM['2寮'] },
+  },
+  {
+    id: 'kitchen',
+    label: '調理人向け集計',
+    icon: ChefHat,
+    Component: KitchenSummaryScreen,
   },
   { id: 'expenses', label: '月次経費', icon: Receipt, Component: ExpensesScreen },
   { id: 'settlement', label: '清算・PDF出力', icon: FileSpreadsheet, Component: SettlementScreen },

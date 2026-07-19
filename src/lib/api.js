@@ -166,6 +166,7 @@ function replaceDummyGuestMeals(yearMonth, date, dorm, guests) {
     .map((g) => ({
       date,
       dorm: d,
+      category: g.category || '見学高校生',
       school: (g.school || '').trim(),
       name: (g.name || '').trim(),
       breakfast: !!g.breakfast,

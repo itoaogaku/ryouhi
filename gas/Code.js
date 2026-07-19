@@ -34,7 +34,8 @@ var SHEETS = {
   },
   guest_meals: {
     name: 'guest_meals',
-    headers: ['date', 'school', 'name', 'breakfast', 'dinner', 'dorm'],
+    // category（見学高校生/寮外生/寮管）は既存データの列位置を崩さないよう末尾に追加
+    headers: ['date', 'school', 'name', 'breakfast', 'dinner', 'dorm', 'category'],
   },
   monthly_expenses: {
     name: 'monthly_expenses',
@@ -289,6 +290,7 @@ function saveGuestMeals_(date, dorm, guests) {
       toBool_(row[3]),
       toBool_(row[4]),
       rdorm,
+      row[6] != null && row[6] !== '' ? String(row[6]) : '見学高校生',
     ]);
   }
 
@@ -305,6 +307,7 @@ function saveGuestMeals_(date, dorm, guests) {
       toBool_(guests[g].breakfast),
       toBool_(guests[g].dinner),
       dorm,
+      String(guests[g].category || '見学高校生'),
     ]);
   }
 
@@ -476,6 +479,7 @@ function readGuestMeals_(yearMonth) {
       breakfast: toBool_(r[3]),
       dinner: toBool_(r[4]),
       dorm: r[5] != null ? String(r[5]) : '',
+      category: r[6] != null && r[6] !== '' ? String(r[6]) : '見学高校生',
     });
   }
   return out;

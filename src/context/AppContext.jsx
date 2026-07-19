@@ -91,7 +91,7 @@ export function AppProvider({ children }) {
         }
         return Array.from(map.values())
       })
-      // 見学高校生は当日×寮を総入れ替え
+      // 寮生以外（見学高校生・寮外生・寮管）は当日×寮を総入れ替え
       if (date) {
         const d = dorm || ''
         const valid = guests
@@ -101,6 +101,7 @@ export function AppProvider({ children }) {
           .map((g) => ({
             date,
             dorm: d,
+            category: g.category || '見学高校生',
             school: (g.school || '').trim(),
             name: (g.name || '').trim(),
             breakfast: !!g.breakfast,

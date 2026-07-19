@@ -20,6 +20,16 @@ export const GRADES = ['1年', '2年', '3年', '4年']
 // 所属寮
 export const DORMS = ['1寮', '2寮']
 
+// 寮生以外に食事をとる人の種別（食数管理の「追加の食数」欄で使用）
+export const GUEST_CATEGORIES = ['見学高校生', '寮外生', '寮管']
+
+// 寮ごとに記録を許可する追加食数の種別
+// （2寮には高校生が泊まらないため見学高校生は対象外）
+export const GUEST_CATEGORIES_BY_DORM = {
+  '1寮': ['見学高校生', '寮外生', '寮管'],
+  '2寮': ['寮外生', '寮管'],
+}
+
 // 合宿1泊単価のプリセット
 export const CAMP_PRICE_PRESETS = [
   { label: '2700円', value: 2700 },

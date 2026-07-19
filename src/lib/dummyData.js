@@ -100,7 +100,19 @@ const GUEST_LIST = [
   { school: '桜丘高校', name: '西村 陽向' },
 ]
 
-// 見学高校生の食数（一部の日にサンプルを生成）
+// 寮外生（クラブ所属だが寮には住んでいない生徒）のサンプル
+const EXTERNAL_STUDENTS = [
+  { name: '外部 拓真', dorm: '1寮' },
+  { name: '外部 美月', dorm: '2寮' },
+]
+
+// 寮管（寮の管理人）のサンプル
+const DORM_MANAGERS = [
+  { name: '寮母 田中', dorm: '1寮' },
+  { name: '寮父 佐々木', dorm: '2寮' },
+]
+
+// 寮生以外の食数（見学高校生・寮外生・寮管）を生成
 function generateGuestMeals(year, month) {
   const guests = []
   const totalDays = daysInMonth(year, month)
@@ -108,17 +120,68 @@ function generateGuestMeals(year, month) {
   const isCurrentMonth =
     year === today.getFullYear() && month === today.getMonth() + 1
   const lastDay = isCurrentMonth ? today.getDate() : totalDays
-  // 数日おきに1〜2名が見学に来る想定
+
+  // 見学高校生：1寮のみ、数日おきに1〜2名が見学に来る想定
   for (let d = 5; d <= lastDay; d += 7) {
     const date = toDateStr(year, month, d)
-    const dorm = d % 14 === 5 ? '1寮' : '2寮'
     const a = GUEST_LIST[d % GUEST_LIST.length]
-    guests.push({ date, dorm, school: a.school, name: a.name, breakfast: false, dinner: true })
+    guests.push({
+      date,
+      dorm: '1寮',
+      category: '見学高校生',
+      school: a.school,
+      name: a.name,
+      breakfast: false,
+      dinner: true,
+    })
     if (d % 2 === 0) {
       const b = GUEST_LIST[(d + 1) % GUEST_LIST.length]
-      guests.push({ date, dorm, school: b.school, name: b.name, breakfast: true, dinner: true })
+      guests.push({
+        date,
+        dorm: '1寮',
+        category: '見学高校生',
+        school: b.school,
+        name: b.name,
+        breakfast: true,
+        dinner: true,
+      })
     }
   }
+
+  // 寮外生：平日の夕食のみ、それぞれの所属寮で
+  for (let d = 1; d <= lastDay; d++) {
+    const dow = new Date(year, month - 1, d).getDay()
+    if (dow === 0 || dow === 6) continue
+    const date = toDateStr(year, month, d)
+    for (const s of EXTERNAL_STUDENTS) {
+      guests.push({
+        date,
+        dorm: s.dorm,
+        category: '寮外生',
+        school: '',
+        name: s.name,
+        breakfast: false,
+        dinner: true,
+      })
+    }
+  }
+
+  // 寮管：ほぼ毎日、朝夕ともに食事
+  for (let d = 1; d <= lastDay; d++) {
+    const date = toDateStr(year, month, d)
+    for (const m of DORM_MANAGERS) {
+      guests.push({
+        date,
+        dorm: m.dorm,
+        category: '寮管',
+        school: '',
+        name: m.name,
+        breakfast: true,
+        dinner: true,
+      })
+    }
+  }
+
   return guests
 }
 

@@ -11,7 +11,7 @@ import {
   Home,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
-import { RANKS, GROUPS } from '../lib/constants.js'
+import { RANKS, GROUPS, GUEST_CATEGORIES } from '../lib/constants.js'
 import {
   Button,
   Card,
@@ -33,8 +33,9 @@ import {
 
 // 画面B：日別・月別 食数管理（寮ごと）
 // dorm: '1寮' | '2寮' — その寮の食数を管理
-// showGuests: 見学高校生の食数欄を表示するか（2寮は高校生が泊まらないため非表示）
-export default function MealLogsScreen({ dorm, showGuests = true }) {
+// guestCategories: この寮で記録を許可する「寮生以外」の種別
+//   （2寮には高校生が泊まらないため見学高校生は対象外にできる）
+export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIES }) {
   const { year, month, members, mealLogs, guestMeals, loading, saveMealLogs } =
     useApp()
 
@@ -53,7 +54,8 @@ export default function MealLogsScreen({ dorm, showGuests = true }) {
 
   // member_id -> { breakfast, dinner } の編集バッファ（当日×この寮）
   const [draft, setDraft] = useState({})
-  // 見学高校生の当日バッファ: [{ uid, school, name, breakfast, dinner }]
+  // 寮生以外（見学高校生・寮外生・寮管）の当日バッファ:
+  // [{ uid, category, school, name, breakfast, dinner }]
   const [guestDraft, setGuestDraft] = useState([])
 
   const dateStr = toDateStr(year, month, day)
@@ -81,6 +83,7 @@ export default function MealLogsScreen({ dorm, showGuests = true }) {
         .filter((g) => g.date === dateStr && (g.dorm || '') === dorm)
         .map((g) => ({
           uid: uid(),
+          category: g.category || '見学高校生',
           school: g.school || '',
           name: g.name || '',
           breakfast: !!g.breakfast,
@@ -144,11 +147,18 @@ export default function MealLogsScreen({ dorm, showGuests = true }) {
     setDirty(true)
   }
 
-  // ---- 見学高校生の操作 ----
+  // ---- 寮生以外（見学高校生・寮外生・寮管）の操作 ----
   const addGuest = () => {
     setGuestDraft((prev) => [
       ...prev,
-      { uid: uid(), school: '', name: '', breakfast: false, dinner: true },
+      {
+        uid: uid(),
+        category: guestCategories[0] || '見学高校生',
+        school: '',
+        name: '',
+        breakfast: false,
+        dinner: true,
+      },
     ])
     setDirty(true)
   }
@@ -177,22 +187,20 @@ export default function MealLogsScreen({ dorm, showGuests = true }) {
           dinner: !!v.dinner,
         }
       })
-      // 見学高校生（学校名または氏名ありのみ保存）。非表示の寮は空配列
-      const guests = showGuests
-        ? guestDraft
-            .filter(
-              (g) =>
-                (g.name || '').trim() !== '' || (g.school || '').trim() !== ''
-            )
-            .map((g) => ({
-              date: dateStr,
-              dorm,
-              school: (g.school || '').trim(),
-              name: (g.name || '').trim(),
-              breakfast: !!g.breakfast,
-              dinner: !!g.dinner,
-            }))
-        : []
+      // 寮生以外（学校名または氏名ありのみ保存）
+      const guests = guestDraft
+        .filter(
+          (g) => (g.name || '').trim() !== '' || (g.school || '').trim() !== ''
+        )
+        .map((g) => ({
+          date: dateStr,
+          dorm,
+          category: g.category || '見学高校生',
+          school: (g.school || '').trim(),
+          name: (g.name || '').trim(),
+          breakfast: !!g.breakfast,
+          dinner: !!g.dinner,
+        }))
       await saveMealLogs(logs, guests, dateStr, dorm)
       setDirty(false)
     } finally {
@@ -221,6 +229,11 @@ export default function MealLogsScreen({ dorm, showGuests = true }) {
 
   const dow = weekdayOf(year, month, day)
   const isWeekend = dow === 0 || dow === 6
+
+  // セレクトの選択肢: この寮で許可された種別 + 既存データに残る種別（データ欠落防止）
+  const availableCategories = Array.from(
+    new Set([...guestCategories, ...guestDraft.map((g) => g.category)])
+  )
 
   if (loading) return <LoadingState />
 
@@ -421,14 +434,14 @@ export default function MealLogsScreen({ dorm, showGuests = true }) {
         </CardContent>
       </Card>
 
-      {/* 見学高校生の食数（2寮など高校生が泊まらない寮では非表示） */}
-      {showGuests && (
+      {/* 寮生以外（見学高校生・寮外生・寮管）の食数 */}
+      {guestCategories.length > 0 && (
       <Card>
         <CardContent className="p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-700">
               <GraduationCap className="h-4 w-4 text-indigo-500" />
-              見学高校生の食数 · {dorm}（{month}月{day}日 {WEEKDAY_JA[dow]}）
+              寮生以外の食数 · {dorm}（{month}月{day}日 {WEEKDAY_JA[dow]}）
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="default" className="gap-1">
@@ -439,19 +452,23 @@ export default function MealLogsScreen({ dorm, showGuests = true }) {
               </Badge>
               <Button size="sm" variant="secondary" onClick={addGuest}>
                 <Plus className="h-3.5 w-3.5" />
-                高校生を追加
+                追加
               </Button>
             </div>
           </div>
+          <p className="mb-3 text-xs text-slate-400">
+            見学高校生・寮外生・寮管など、寮生以外で食事をとる人をここに記録します。
+          </p>
 
           {guestDraft.length === 0 ? (
             <p className="py-4 text-center text-xs text-slate-400">
-              この日の見学高校生はいません。「高校生を追加」で名前と朝夕を記録できます。
+              この日は寮生以外の記録がありません。「追加」で種別・氏名・朝夕を記録できます。
             </p>
           ) : (
             <div className="space-y-2">
-              <div className="grid grid-cols-[1.1fr_1.1fr_56px_56px_32px] gap-2 px-1 text-[11px] font-medium text-slate-400">
-                <span>学校名</span>
+              <div className="grid grid-cols-[100px_1fr_1fr_56px_56px_32px] gap-2 px-1 text-[11px] font-medium text-slate-400">
+                <span>種別</span>
+                <span>学校名・備考</span>
                 <span>氏名</span>
                 <span className="text-center">朝食</span>
                 <span className="text-center">夕食</span>
@@ -460,11 +477,24 @@ export default function MealLogsScreen({ dorm, showGuests = true }) {
               {guestDraft.map((g) => (
                 <div
                   key={g.uid}
-                  className="grid grid-cols-[1.1fr_1.1fr_56px_56px_32px] items-center gap-2"
+                  className="grid grid-cols-[100px_1fr_1fr_56px_56px_32px] items-center gap-2"
                 >
+                  <Select
+                    value={g.category}
+                    onChange={(e) => updateGuest(g.uid, 'category', e.target.value)}
+                    className="h-9 text-xs"
+                  >
+                    {availableCategories.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </Select>
                   <Input
                     value={g.school}
-                    placeholder="〇〇高校"
+                    placeholder={
+                      g.category === '見学高校生' ? '〇〇高校' : '備考（任意）'
+                    }
                     onChange={(e) => updateGuest(g.uid, 'school', e.target.value)}
                   />
                   <Input
@@ -501,7 +531,7 @@ export default function MealLogsScreen({ dorm, showGuests = true }) {
 
       <p className="text-xs text-muted-foreground">
         ※チェックの有無を当日の食数として一括保存します（メンバー: UPSERT
-        {showGuests && '、見学高校生: 当日分を入れ替え'}）。上部の「一括保存」ボタンで保存されます。
+        {guestCategories.length > 0 && '、寮生以外: 当日分を入れ替え'}）。上部の「一括保存」ボタンで保存されます。
       </p>
     </div>
   )
