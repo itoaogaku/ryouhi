@@ -10,6 +10,7 @@ import {
   ChevronRight,
   Trophy,
   Tent,
+  Tag,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { GROUPS } from '../lib/constants.js'
@@ -38,6 +39,7 @@ export default function SettlementScreen() {
     expenses,
     tournamentItems,
     campItems,
+    otherItems,
     mealLogs,
     config,
     year,
@@ -60,11 +62,21 @@ export default function SettlementScreen() {
         expenses,
         tournamentItems,
         campItems,
+        otherItems,
         mealLogs,
         config,
         yearMonth,
       }),
-    [members, expenses, tournamentItems, campItems, mealLogs, config, yearMonth]
+    [
+      members,
+      expenses,
+      tournamentItems,
+      campItems,
+      otherItems,
+      mealLogs,
+      config,
+      yearMonth,
+    ]
   )
 
   const toggleExpand = (id) => {
@@ -242,6 +254,7 @@ export default function SettlementScreen() {
                   <th className="px-3 py-2.5 text-right">治療費</th>
                   <th className="px-3 py-2.5 text-right">佐川</th>
                   <th className="px-3 py-2.5 text-right">ウエア</th>
+                  <th className="px-3 py-2.5 text-right">その他</th>
                   <th className="px-3 py-2.5 text-right font-semibold text-slate-700">
                     合計請求額
                   </th>
@@ -250,7 +263,9 @@ export default function SettlementScreen() {
               <tbody>
                 {displayRows.map((r, i) => {
                   const hasDetail =
-                    r.tournamentRows.length > 0 || r.campRows.length > 0
+                    r.tournamentRows.length > 0 ||
+                    r.campRows.length > 0 ||
+                    r.otherRows.length > 0
                   const isOpen = expanded.has(r.memberId)
                   return (
                     <React.Fragment key={r.memberId}>
@@ -315,13 +330,21 @@ export default function SettlementScreen() {
                         <td className="px-3 py-2 text-right tabular-nums text-slate-600">
                           {r.wear ? formatYen(r.wear) : '—'}
                         </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-slate-600">
+                          {r.other ? formatYen(r.other) : '—'}
+                          {r.otherRows.length > 0 && (
+                            <span className="ml-1 text-[11px] text-slate-400">
+                              ({r.otherRows.length})
+                            </span>
+                          )}
+                        </td>
                         <td className="px-3 py-2 text-right font-semibold tabular-nums text-primary">
                           {formatYen(r.total)}
                         </td>
                       </tr>
                       {isOpen && hasDetail && (
                         <tr className="border-b border-slate-200 bg-slate-50/70">
-                          <td colSpan={12} className="px-4 py-3">
+                          <td colSpan={13} className="px-4 py-3">
                             <BreakdownDetail row={r} />
                           </td>
                         </tr>
@@ -332,7 +355,7 @@ export default function SettlementScreen() {
                 {displayRows.length === 0 && (
                   <tr>
                     <td
-                      colSpan={12}
+                      colSpan={13}
                       className="px-4 py-10 text-center text-sm text-muted-foreground"
                     >
                       対象データがありません
@@ -347,9 +370,9 @@ export default function SettlementScreen() {
 
       <p className="text-xs text-muted-foreground">
         合計請求額 = 部費 + 大会費(各: 参加費−補助) + 合宿費(各: 単価×泊数) +
-        (治療費実費−補助金) + 佐川代 + ウエア代 + 食費(朝×
+        (治療費実費−補助金) + 佐川代 + ウエア代 + その他費用(各項目の合計) + 食費(朝×
         {formatYen(config.breakfast_price)} + 夕×{formatYen(config.dinner_price)})
-        ／ ▶ をクリックすると大会・合宿の明細を確認できます。
+        ／ ▶ をクリックすると大会・合宿・その他費用の明細を確認できます。
       </p>
 
       {/* PDF描画用オフスクリーン要素（グループごと1ページ） */}
@@ -384,7 +407,7 @@ export default function SettlementScreen() {
 // 大会・合宿の明細（画面D 展開時）
 function BreakdownDetail({ row }) {
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       {/* 大会明細 */}
       {row.tournamentRows.length > 0 && (
         <div className="rounded-lg border border-slate-200 bg-white p-3">
@@ -470,6 +493,40 @@ function BreakdownDetail({ row }) {
                 </td>
                 <td className="py-1 text-right tabular-nums text-emerald-600">
                   {formatYen(row.camp)}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* その他費用明細 */}
+      {row.otherRows.length > 0 && (
+        <div className="rounded-lg border border-slate-200 bg-white p-3">
+          <div className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-slate-700">
+            <Tag className="h-4 w-4 text-sky-500" />
+            その他費用明細
+          </div>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-[10px] text-slate-400">
+                <th className="py-1 text-left">項目名</th>
+                <th className="py-1 text-right">金額</th>
+              </tr>
+            </thead>
+            <tbody>
+              {row.otherRows.map((o, idx) => (
+                <tr key={idx} className="border-t border-slate-100">
+                  <td className="py-1 font-medium text-slate-700">{o.name}</td>
+                  <td className="py-1 text-right font-semibold tabular-nums text-sky-600">
+                    {formatYen(o.amount)}
+                  </td>
+                </tr>
+              ))}
+              <tr className="border-t border-slate-200 font-semibold">
+                <td className="py-1 text-slate-600">小計</td>
+                <td className="py-1 text-right tabular-nums text-sky-600">
+                  {formatYen(row.other)}
                 </td>
               </tr>
             </tbody>

@@ -99,11 +99,12 @@ export async function saveMealLogs(yearMonth, logs, guests, date, dorm) {
 }
 
 // 月次経費一括保存（UPSERT）
-// payload: { expenses, tournamentItems, campItems }
+// payload: { expenses, tournamentItems, campItems, otherItems }
 export async function saveExpenses(yearMonth, payload) {
   const expenses = payload.expenses || []
   const tournamentItems = payload.tournamentItems || []
   const campItems = payload.campItems || []
+  const otherItems = payload.otherItems || []
   if (USE_DUMMY) {
     await delay(150)
     const store = dummyStore.loaded[yearMonth]
@@ -118,6 +119,10 @@ export async function saveExpenses(yearMonth, payload) {
         ...(store.campItems || []).filter((i) => i.year_month !== yearMonth),
         ...structuredCloneSafe(campItems),
       ]
+      store.otherItems = [
+        ...(store.otherItems || []).filter((i) => i.year_month !== yearMonth),
+        ...structuredCloneSafe(otherItems),
+      ]
     }
     return { saved: expenses.length }
   }
@@ -126,6 +131,7 @@ export async function saveExpenses(yearMonth, payload) {
     expenses,
     tournamentItems,
     campItems,
+    otherItems,
   })
 }
 

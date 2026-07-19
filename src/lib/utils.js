@@ -83,3 +83,8 @@ export function emptyTournamentItem() {
 export function emptyCampItem() {
   return { uid: uid(), name: '', fee_per_night: 2700, nights: 0 }
 }
+
+// 空のその他費用明細（名前を自由に付けられる追加項目。例: 教材費・保険料など）
+export function emptyOtherItem() {
+  return { uid: uid(), name: '', amount: 0 }
+}

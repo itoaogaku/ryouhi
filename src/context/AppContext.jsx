@@ -29,6 +29,7 @@ export function AppProvider({ children }) {
   const [expenses, setExpenses] = useState([])
   const [tournamentItems, setTournamentItems] = useState([])
   const [campItems, setCampItems] = useState([])
+  const [otherItems, setOtherItems] = useState([])
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -53,6 +54,7 @@ export function AppProvider({ children }) {
       setExpenses(data.expenses || [])
       setTournamentItems(data.tournamentItems || [])
       setCampItems(data.campItems || [])
+      setOtherItems(data.otherItems || [])
     } catch (e) {
       console.error(e)
       setError(e.message || 'データの取得に失敗しました')
@@ -114,7 +116,7 @@ export function AppProvider({ children }) {
     [yearMonth, showToast]
   )
 
-  // payload: { expenses, tournamentItems, campItems }
+  // payload: { expenses, tournamentItems, campItems, otherItems }
   const saveExpenses = useCallback(
     async (payload) => {
       await api.saveExpenses(yearMonth, payload)
@@ -122,6 +124,7 @@ export function AppProvider({ children }) {
         expenses: nextExpenses = [],
         tournamentItems: nextTournaments = [],
         campItems: nextCamps = [],
+        otherItems: nextOthers = [],
       } = payload
       setExpenses((prev) => [
         ...prev.filter((e) => e.year_month !== yearMonth),
@@ -134,6 +137,10 @@ export function AppProvider({ children }) {
       setCampItems((prev) => [
         ...prev.filter((i) => i.year_month !== yearMonth),
         ...nextCamps,
+      ])
+      setOtherItems((prev) => [
+        ...prev.filter((i) => i.year_month !== yearMonth),
+        ...nextOthers,
       ])
       showToast('月次経費を保存しました')
     },
@@ -153,6 +160,7 @@ export function AppProvider({ children }) {
     expenses,
     tournamentItems,
     campItems,
+    otherItems,
     loading,
     error,
     toast,

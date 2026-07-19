@@ -59,6 +59,11 @@ var SHEETS = {
     name: 'camp_items',
     headers: ['year_month', 'member_id', 'name', 'fee_per_night', 'nights'],
   },
+  other_items: {
+    // 佐川代・ウエア代と同じイメージで、自由に名前を付けて追加できる費用項目
+    name: 'other_items',
+    headers: ['year_month', 'member_id', 'name', 'amount'],
+  },
   config: {
     name: 'config',
     headers: ['key', 'value'],
@@ -133,7 +138,8 @@ function handleRequest(e, method) {
           params.year_month,
           params.expenses,
           params.tournamentItems,
-          params.campItems
+          params.campItems,
+          params.otherItems
         );
         break;
       case 'ping':
@@ -170,6 +176,7 @@ function getInitialData(yearMonth) {
   var expenses = readExpenses_(yearMonth);
   var tournamentItems = readTournamentItems_(yearMonth);
   var campItems = readCampItems_(yearMonth);
+  var otherItems = readOtherItems_(yearMonth);
   return {
     members: members,
     config: config,
@@ -178,6 +185,7 @@ function getInitialData(yearMonth) {
     expenses: expenses,
     tournamentItems: tournamentItems,
     campItems: campItems,
+    otherItems: otherItems,
   };
 }
 
@@ -308,12 +316,13 @@ function saveGuestMeals_(date, dorm, guests) {
 }
 
 // 月次経費 UPSERT（key: year_month + member_id）
-// 大会・合宿の明細は「当月分を総入れ替え」で保存します。
-function saveExpenses(yearMonth, expenses, tournamentItems, campItems) {
+// 大会・合宿・その他費用の明細は「当月分を総入れ替え」で保存します。
+function saveExpenses(yearMonth, expenses, tournamentItems, campItems, otherItems) {
   ensureSheets_();
   expenses = expenses || [];
   tournamentItems = tournamentItems || [];
   campItems = campItems || [];
+  otherItems = otherItems || [];
 
   // --- monthly_expenses（治療/佐川/ウエア）を UPSERT ---
   var sheet = getSheet_(SHEETS.monthly_expenses.name);
@@ -383,10 +392,25 @@ function saveExpenses(yearMonth, expenses, tournamentItems, campItems) {
     })
   );
 
+  // --- その他費用明細：当月分を総入れ替え ---
+  replaceMonthItems_(
+    SHEETS.other_items,
+    yearMonth,
+    otherItems.map(function (o) {
+      return [
+        String(o.year_month || yearMonth),
+        Number(o.member_id),
+        String(o.name || 'その他'),
+        num_(o.amount),
+      ];
+    })
+  );
+
   return {
     saved: expenses.length,
     tournamentItems: tournamentItems.length,
     campItems: campItems.length,
+    otherItems: otherItems.length,
   };
 }
 
@@ -549,6 +573,24 @@ function readCampItems_(yearMonth) {
       name: String(r[2]),
       fee_per_night: num_(r[3]),
       nights: num_(r[4]),
+    });
+  }
+  return out;
+}
+
+function readOtherItems_(yearMonth) {
+  var sheet = getSheet_(SHEETS.other_items.name);
+  var values = getBody_(sheet);
+  var out = [];
+  for (var i = 0; i < values.length; i++) {
+    var r = values[i];
+    if (r[0] === '' && r[1] === '') continue;
+    if (yearMonth && String(r[0]) !== yearMonth) continue;
+    out.push({
+      year_month: String(r[0]),
+      member_id: Number(r[1]),
+      name: String(r[2]),
+      amount: num_(r[3]),
     });
   }
   return out;

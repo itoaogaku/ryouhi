@@ -194,6 +194,26 @@ function generateCampItems(members, year, month) {
   return items
 }
 
+const OTHER_ITEM_NAMES = ['教材費', '保険料', '寮内備品代']
+
+// その他費用（自由記名の追加項目）を一部メンバーに生成
+function generateOtherItems(members, year, month) {
+  const yearMonth = toYearMonth(year, month)
+  const items = []
+  for (const m of members) {
+    if (!m.active) continue
+    if (m.id % 8 !== 0) continue // 8人に1人
+    const name = OTHER_ITEM_NAMES[m.id % OTHER_ITEM_NAMES.length]
+    items.push({
+      year_month: yearMonth,
+      member_id: m.id,
+      name,
+      amount: 1000 + (m.id % 3) * 500,
+    })
+  }
+  return items
+}
+
 // getInitialData 相当のダミーデータ一式を生成
 export function buildDummyInitialData(year, month) {
   const members = generateMembers()
@@ -205,6 +225,7 @@ export function buildDummyInitialData(year, month) {
     expenses: generateExpenses(members, year, month),
     tournamentItems: generateTournamentItems(members, year, month),
     campItems: generateCampItems(members, year, month),
+    otherItems: generateOtherItems(members, year, month),
   }
 }
 

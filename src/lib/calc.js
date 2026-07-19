@@ -11,6 +11,7 @@ import { num } from './utils.js'
 //   + (治療費実費 − 治療費補助金)
 //   + 佐川代
 //   + ウエア代
+//   + その他費用合計 … 自由に名前を付けて追加できる項目（教材費・保険料など）の合計
 //   + 食費(朝食数 × 朝食単価 + 夕食数 × 夕食単価)
 // -------------------------------------------------------------
 
@@ -48,6 +49,7 @@ export function computeSettlement({
   expense,
   tournaments,
   camps,
+  others,
   meals,
   config,
 }) {
@@ -77,6 +79,13 @@ export function computeSettlement({
   const sagawa = num(expense?.sagawa_fee)
   const wear = num(expense?.wear_fee)
 
+  // その他費用明細（自由記名の追加項目）
+  const otherRows = (others || []).map((o) => ({
+    name: o.name || 'その他',
+    amount: num(o.amount),
+  }))
+  const other = otherRows.reduce((a, r) => a + r.amount, 0)
+
   const breakfastCount = num(meals?.breakfast)
   const dinnerCount = num(meals?.dinner)
   const breakfastFee = breakfastCount * num(config.breakfast_price)
@@ -84,7 +93,7 @@ export function computeSettlement({
   const mealFee = breakfastFee + dinnerFee
 
   const total =
-    clubFee + tournament + camp + medical + sagawa + wear + mealFee
+    clubFee + tournament + camp + medical + sagawa + wear + other + mealFee
 
   return {
     memberId: member.id,
@@ -103,7 +112,10 @@ export function computeSettlement({
     medical,
     medicalActual: num(expense?.medical_actual),
     medicalSubsidy: num(expense?.medical_subsidy),
-    // その他
+    // その他（自由記名の追加項目）
+    otherRows,
+    other,
+    // 固定項目
     clubFee,
     sagawa,
     wear,
@@ -135,6 +147,7 @@ export function buildSettlementRows({
   expenses,
   tournamentItems,
   campItems,
+  otherItems,
   mealLogs,
   config,
   yearMonth,
@@ -147,6 +160,7 @@ export function buildSettlementRows({
   }
   const tournamentsByMember = groupByMember(tournamentItems, yearMonth)
   const campsByMember = groupByMember(campItems, yearMonth)
+  const othersByMember = groupByMember(otherItems, yearMonth)
 
   return members
     .filter((m) => m.active)
@@ -154,12 +168,14 @@ export function buildSettlementRows({
       const expense = expenseByMember.get(String(member.id))
       const tournaments = tournamentsByMember.get(String(member.id)) || []
       const camps = campsByMember.get(String(member.id)) || []
+      const others = othersByMember.get(String(member.id)) || []
       const meals = countMeals(mealLogs, member.id, yearMonth)
       return computeSettlement({
         member,
         expense,
         tournaments,
         camps,
+        others,
         meals,
         config,
       })

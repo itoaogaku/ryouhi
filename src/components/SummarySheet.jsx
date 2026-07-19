@@ -37,11 +37,20 @@ const COLS = [
     sum: true,
     sub: (r) => r.campRows.map((c) => `${c.name}(${c.nights}泊)`).join('・'),
   },
-  { key: 'medicalActual', label: '治療実費', w: '6%', align: 'right', money: true, sum: true },
-  { key: 'medicalSubsidy', label: '治療補助', w: '6%', align: 'right', money: true, sum: true },
-  { key: 'medical', label: '治療差額', w: '6%', align: 'right', money: true, sum: true },
-  { key: 'sagawa', label: '佐川', w: '5%', align: 'right', money: true, sum: true },
-  { key: 'wear', label: 'ウエア', w: '6%', align: 'right', money: true, sum: true },
+  { key: 'medicalActual', label: '治療実費', w: '5%', align: 'right', money: true, sum: true },
+  { key: 'medicalSubsidy', label: '治療補助', w: '5%', align: 'right', money: true, sum: true },
+  { key: 'medical', label: '治療差額', w: '5%', align: 'right', money: true, sum: true },
+  { key: 'sagawa', label: '佐川', w: '4%', align: 'right', money: true, sum: true },
+  { key: 'wear', label: 'ウエア', w: '5%', align: 'right', money: true, sum: true },
+  {
+    key: 'other',
+    label: 'その他',
+    w: '5%',
+    align: 'right',
+    money: true,
+    sum: true,
+    sub: (r) => r.otherRows.map((o) => o.name).join('・'),
+  },
   {
     key: 'total',
     label: '合計',
@@ -196,7 +205,8 @@ function Page({ items, pageIndex, pageCount, year, month, config }) {
 
       {pageIndex === pageCount - 1 && (
         <div style={{ marginTop: 10, fontSize: 8.5, color: '#94a3b8' }}>
-          ※ 大会費=各(参加費−補助)の合計、合宿費=各(1泊単価×泊数)の合計、治療差額=実費−補助。大会費・合宿費のセル下部に対象イベント名を表示しています。
+          ※
+          大会費=各(参加費−補助)の合計、合宿費=各(1泊単価×泊数)の合計、治療差額=実費−補助、その他=自由項目の合計。大会費・合宿費・その他のセル下部に対象イベント/項目名を表示しています。
         </div>
       )}
     </div>

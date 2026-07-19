@@ -8,6 +8,7 @@ import {
   Trash2,
   Trophy,
   Tent,
+  Tag,
   Users,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
@@ -27,6 +28,7 @@ import {
   emptyExpense,
   emptyTournamentItem,
   emptyCampItem,
+  emptyOtherItem,
   formatYen,
   num,
   uid,
@@ -41,16 +43,17 @@ export default function ExpensesScreen() {
     expenses,
     tournamentItems,
     campItems,
+    otherItems,
     yearMonth,
     loading,
     saveExpenses,
   } = useApp()
-  const [rows, setRows] = useState({}) // member_id -> { ...expense, tournaments, camps }
+  const [rows, setRows] = useState({}) // member_id -> { ...expense, tournaments, camps, others }
   const [expanded, setExpanded] = useState(() => new Set())
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [filterGroup, setFilterGroup] = useState('all')
-  const [bulkType, setBulkType] = useState(null) // 'tournament' | 'camp' | null
+  const [bulkType, setBulkType] = useState(null) // 'tournament' | 'camp' | 'other' | null
 
   const activeMembers = useMemo(
     () => members.filter((m) => m.active),
@@ -67,6 +70,7 @@ export default function ExpensesScreen() {
       )
       const tourByMember = groupBy(tournamentItems, yearMonth)
       const campByMember = groupBy(campItems, yearMonth)
+      const otherByMember = groupBy(otherItems, yearMonth)
 
       const map = {}
       for (const m of activeMembers) {
@@ -89,11 +93,16 @@ export default function ExpensesScreen() {
             fee_per_night: num(c.fee_per_night),
             nights: num(c.nights),
           })),
+          others: (otherByMember.get(key) || []).map((o) => ({
+            uid: uid(),
+            name: o.name || '',
+            amount: num(o.amount),
+          })),
         }
       }
       return map
     }
-  }, [expenses, tournamentItems, campItems, yearMonth, activeMembers])
+  }, [expenses, tournamentItems, campItems, otherItems, yearMonth, activeMembers])
 
   useEffect(() => {
     setRows(buildRows())
@@ -180,6 +189,40 @@ export default function ExpensesScreen() {
     setDirty(true)
   }
 
+  // ---- その他費用明細操作（佐川代・ウエア代と同じイメージの自由追加項目） ----
+  const addOther = (id) => {
+    setRows((prev) => ({
+      ...prev,
+      [String(id)]: {
+        ...prev[String(id)],
+        others: [...prev[String(id)].others, emptyOtherItem()],
+      },
+    }))
+    setDirty(true)
+  }
+  const updateOther = (id, uidKey, field, value) => {
+    setRows((prev) => ({
+      ...prev,
+      [String(id)]: {
+        ...prev[String(id)],
+        others: prev[String(id)].others.map((o) =>
+          o.uid === uidKey ? { ...o, [field]: value } : o
+        ),
+      },
+    }))
+    setDirty(true)
+  }
+  const removeOther = (id, uidKey) => {
+    setRows((prev) => ({
+      ...prev,
+      [String(id)]: {
+        ...prev[String(id)],
+        others: prev[String(id)].others.filter((o) => o.uid !== uidKey),
+      },
+    }))
+    setDirty(true)
+  }
+
   const toggleExpand = (id) => {
     setExpanded((prev) => {
       const next = new Set(prev)
@@ -257,12 +300,35 @@ export default function ExpensesScreen() {
     setBulkType(null)
   }
 
+  // ---- 一括登録：選択メンバーに同じその他費用項目を追加（同名は上書き） ----
+  const applyBulkOther = (event, memberIds) => {
+    setRows((prev) => {
+      const next = { ...prev }
+      for (const id of memberIds) {
+        const key = String(id)
+        const cur = next[key]
+        if (!cur) continue
+        const found = cur.others.find((o) => o.name === event.name)
+        const others = found
+          ? cur.others.map((o) =>
+              o.name === event.name ? { ...o, amount: event.amount } : o
+            )
+          : [...cur.others, { uid: uid(), name: event.name, amount: event.amount }]
+        next[key] = { ...cur, others }
+      }
+      return next
+    })
+    setDirty(true)
+    setBulkType(null)
+  }
+
   const handleSave = async () => {
     setSaving(true)
     try {
       const expensesList = []
       const tournamentList = []
       const campList = []
+      const otherList = []
       for (const m of activeMembers) {
         const r = row(m.id)
         expensesList.push({
@@ -298,11 +364,21 @@ export default function ExpensesScreen() {
             nights: num(c.nights),
           })
         }
+        for (const o of r.others) {
+          if (!o.name && !num(o.amount)) continue
+          otherList.push({
+            year_month: yearMonth,
+            member_id: m.id,
+            name: o.name || 'その他',
+            amount: num(o.amount),
+          })
+        }
       }
       await saveExpenses({
         expenses: expensesList,
         tournamentItems: tournamentList,
         campItems: campList,
+        otherItems: otherList,
       })
       setDirty(false)
     } finally {
@@ -350,6 +426,10 @@ export default function ExpensesScreen() {
             <Tent className="h-4 w-4 text-emerald-500" />
             合宿を一括登録
           </Button>
+          <Button variant="secondary" onClick={() => setBulkType('other')}>
+            <Tag className="h-4 w-4 text-sky-500" />
+            その他費用を一括登録
+          </Button>
         </div>
         <div className="flex items-center gap-2">
           {dirty && (
@@ -373,6 +453,7 @@ export default function ExpensesScreen() {
           onClose={() => setBulkType(null)}
           onApplyTournament={applyBulkTournament}
           onApplyCamp={applyBulkCamp}
+          onApplyOther={applyBulkOther}
         />
       )}
 
@@ -391,6 +472,7 @@ export default function ExpensesScreen() {
                   <th className="px-2 py-2.5 text-right text-primary">治療差額</th>
                   <th className="px-2 py-2.5 text-right">佐川代</th>
                   <th className="px-2 py-2.5 text-right">ウエア代</th>
+                  <th className="px-3 py-2.5 text-right">その他費用</th>
                 </tr>
               </thead>
               <tbody>
@@ -404,6 +486,10 @@ export default function ExpensesScreen() {
                   )
                   const campTotal = r.camps.reduce(
                     (a, c) => a + campItemCost(c),
+                    0
+                  )
+                  const otherTotal = r.others.reduce(
+                    (a, o) => a + num(o.amount),
                     0
                   )
                   const net = medicalNet(r)
@@ -514,13 +600,27 @@ export default function ExpensesScreen() {
                             onChange={(v) => updateField(m.id, 'wear_fee', v)}
                           />
                         </td>
+                        {/* その他費用サマリ */}
+                        <td className="px-3 py-1.5 text-right">
+                          <button
+                            onClick={() => toggleExpand(m.id)}
+                            className="inline-flex flex-col items-end"
+                          >
+                            <span className="font-semibold tabular-nums text-slate-800">
+                              {formatYen(otherTotal)}
+                            </span>
+                            <span className="text-[11px] text-slate-400">
+                              {r.others.length}件
+                            </span>
+                          </button>
+                        </td>
                       </tr>
 
-                      {/* 展開: 大会・合宿の明細エディタ */}
+                      {/* 展開: 大会・合宿・その他費用の明細エディタ */}
                       {isOpen && (
                         <tr className="border-b border-slate-200 bg-slate-50/70">
-                          <td colSpan={9} className="px-4 py-3">
-                            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                          <td colSpan={10} className="px-4 py-3">
+                            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
                               <TournamentEditor
                                 items={r.tournaments}
                                 onAdd={() => addTournament(m.id)}
@@ -535,6 +635,12 @@ export default function ExpensesScreen() {
                                 onUpdate={(u, f, v) => updateCamp(m.id, u, f, v)}
                                 onRemove={(u) => removeCamp(m.id, u)}
                               />
+                              <OtherEditor
+                                items={r.others}
+                                onAdd={() => addOther(m.id)}
+                                onUpdate={(u, f, v) => updateOther(m.id, u, f, v)}
+                                onRemove={(u) => removeOther(m.id, u)}
+                              />
                             </div>
                           </td>
                         </tr>
@@ -545,7 +651,7 @@ export default function ExpensesScreen() {
                 {filtered.length === 0 && (
                   <tr>
                     <td
-                      colSpan={9}
+                      colSpan={10}
                       className="px-4 py-10 text-center text-sm text-muted-foreground"
                     >
                       該当するメンバーがいません
@@ -559,8 +665,9 @@ export default function ExpensesScreen() {
       </Card>
 
       <p className="text-xs text-muted-foreground">
-        ※ 行の ▶ を開くと「〇〇大会」「〇〇合宿」を件数無制限で入力できます。大会は
-        参加費 − 補助 = 請求額、合宿は 1泊単価 × 泊数 = 費用 を自動計算します。
+        ※ 行の ▶ を開くと「〇〇大会」「〇〇合宿」に加えて、佐川代・ウエア代と同じ
+        イメージで名前を自由に付けられる「その他費用」も件数無制限で追加できます。
+        大会は参加費 − 補助 = 請求額、合宿は 1泊単価 × 泊数 = 費用を自動計算します。
       </p>
     </div>
   )
@@ -573,10 +680,13 @@ function BulkAddDialog({
   onClose,
   onApplyTournament,
   onApplyCamp,
+  onApplyOther,
 }) {
   const isTournament = type === 'tournament'
+  const isCamp = type === 'camp'
+  const isOther = type === 'other'
   const [name, setName] = useState('')
-  const [fee, setFee] = useState(0) // 大会:参加費 / 合宿:1泊単価
+  const [fee, setFee] = useState(0) // 大会:参加費 / 合宿:1泊単価 / その他:金額
   const [subsidy, setSubsidy] = useState(0) // 大会のみ
   const [nights, setNights] = useState(0) // 合宿のみ
   const [selected, setSelected] = useState(
@@ -610,7 +720,9 @@ function BulkAddDialog({
 
   const preview = isTournament
     ? Math.max(0, num(fee) - num(subsidy))
-    : num(fee) * num(nights)
+    : isCamp
+    ? num(fee) * num(nights)
+    : num(fee)
 
   const canApply = name.trim() !== '' && selected.size > 0
 
@@ -622,11 +734,13 @@ function BulkAddDialog({
         { name: name.trim(), fee: num(fee), subsidy: num(subsidy) },
         ids
       )
-    } else {
+    } else if (isCamp) {
       onApplyCamp(
         { name: name.trim(), fee_per_night: num(fee), nights: num(nights) },
         ids
       )
+    } else {
+      onApplyOther({ name: name.trim(), amount: num(fee) }, ids)
     }
   }
 
@@ -641,7 +755,11 @@ function BulkAddDialog({
       onClose={onClose}
       maxWidth="max-w-3xl"
       title={
-        isTournament ? '大会を一括登録' : '合宿を一括登録'
+        isTournament
+          ? '大会を一括登録'
+          : isCamp
+          ? '合宿を一括登録'
+          : 'その他費用を一括登録'
       }
       footer={
         <div className="flex items-center justify-between gap-3">
@@ -672,20 +790,24 @@ function BulkAddDialog({
           <div className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-slate-700">
             {isTournament ? (
               <Trophy className="h-4 w-4 text-amber-500" />
-            ) : (
+            ) : isCamp ? (
               <Tent className="h-4 w-4 text-emerald-500" />
+            ) : (
+              <Tag className="h-4 w-4 text-sky-500" />
             )}
-            {isTournament ? '大会情報' : '合宿情報'}
+            {isTournament ? '大会情報' : isCamp ? '合宿情報' : 'その他費用情報'}
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
             <div className="sm:col-span-2">
               <label className="mb-1 block text-xs font-medium text-slate-500">
-                {isTournament ? '大会名' : '合宿名'}
+                {isTournament ? '大会名' : isCamp ? '合宿名' : '項目名'}
               </label>
               <Input
                 value={name}
                 autoFocus
-                placeholder={isTournament ? '〇〇大会' : '〇〇合宿'}
+                placeholder={
+                  isTournament ? '〇〇大会' : isCamp ? '〇〇合宿' : '教材費など'
+                }
                 onChange={(e) => setName(e.target.value)}
               />
             </div>
@@ -718,7 +840,7 @@ function BulkAddDialog({
                   />
                 </div>
               </>
-            ) : (
+            ) : isCamp ? (
               <>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-slate-500">
@@ -762,12 +884,28 @@ function BulkAddDialog({
                   />
                 </div>
               </>
+            ) : (
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-500">
+                  金額
+                </label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={fee === 0 ? '' : fee}
+                  placeholder="0"
+                  onChange={(e) => setFee(num(e.target.value))}
+                  className="text-right tabular-nums"
+                />
+              </div>
             )}
           </div>
           <p className="mt-2 text-xs text-slate-400">
             {isTournament
               ? '1人あたり請求額 = 参加費 − 補助（0円未満は0円）'
-              : '1人あたり費用 = 1泊単価 × 泊数'}
+              : isCamp
+              ? '1人あたり費用 = 1泊単価 × 泊数'
+              : '佐川代・ウエア代と同じイメージの追加項目です（1人あたり金額をそのまま請求）'}
             。登録後も各メンバーの行で個別に修正・削除できます。
           </p>
         </div>
@@ -1001,6 +1139,61 @@ function CampEditor({ items, onAdd, onUpdate, onRemove }) {
               </div>
             )
           })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---- その他費用エディタ（佐川代・ウエア代と同じイメージの自由追加項目） ----
+function OtherEditor({ items, onAdd, onUpdate, onRemove }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-700">
+          <Tag className="h-4 w-4 text-sky-500" />
+          その他費用
+        </div>
+        <Button size="sm" variant="secondary" onClick={onAdd}>
+          <Plus className="h-3.5 w-3.5" />
+          項目を追加
+        </Button>
+      </div>
+      {items.length === 0 ? (
+        <p className="py-3 text-center text-xs text-slate-400">
+          その他費用はまだありません
+        </p>
+      ) : (
+        <div className="space-y-2">
+          <div className="grid grid-cols-[1fr_84px_28px] gap-1.5 px-1 text-[10px] font-medium text-slate-400">
+            <span>項目名</span>
+            <span className="text-right">金額</span>
+            <span></span>
+          </div>
+          {items.map((o) => (
+            <div
+              key={o.uid}
+              className="grid grid-cols-[1fr_84px_28px] items-center gap-1.5"
+            >
+              <Input
+                value={o.name}
+                placeholder="教材費など"
+                onChange={(e) => onUpdate(o.uid, 'name', e.target.value)}
+                className="h-8 text-xs"
+              />
+              <SmallNum
+                value={o.amount}
+                onChange={(v) => onUpdate(o.uid, 'amount', v)}
+              />
+              <button
+                onClick={() => onRemove(o.uid)}
+                className="flex h-7 w-7 items-center justify-center rounded text-slate-300 hover:bg-red-50 hover:text-destructive"
+                aria-label="削除"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
         </div>
       )}
     </div>
