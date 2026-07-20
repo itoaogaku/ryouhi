@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Plus, Trash2, Save, UserPlus, RotateCcw } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
-import { RANKS, GROUPS, GRADES, DORMS, DORM_BY_GROUP } from '../lib/constants.js'
+import { RANKS, GROUPS, GRADES, DORMS, GROUP_BY_DORM } from '../lib/constants.js'
 import {
   Button,
   Card,
@@ -34,15 +34,15 @@ export default function MembersScreen() {
     setDirty(true)
   }
 
-  // 集金グループを変更したとき、対応する寮が決まっていれば自動で合わせる
-  // （例: 集金グループを「2寮」にすると所属寮も自動で「2寮」になる）
-  const updateGroup = (id, value) => {
+  // 所属寮を変更したとき、対応する集金グループが決まっていれば自動で合わせる
+  // （例: 寮を「2寮」にすると集金グループも自動で「2寮」になる）
+  const updateDorm = (id, value) => {
     setRows((prev) =>
       prev.map((r) => {
         if (r.id !== id) return r
-        const next = { ...r, group: value }
-        if (DORM_BY_GROUP[value]) {
-          next.dorm = DORM_BY_GROUP[value]
+        const next = { ...r, dorm: value }
+        if (GROUP_BY_DORM[value]) {
+          next.group = GROUP_BY_DORM[value]
         }
         return next
       })
@@ -157,8 +157,8 @@ export default function MembersScreen() {
                   <th className="px-4 py-3">氏名</th>
                   <th className="w-24 px-3 py-3">学年</th>
                   <th className="w-36 px-3 py-3">チームランク</th>
-                  <th className="w-36 px-3 py-3">集金グループ</th>
                   <th className="w-24 px-3 py-3">寮</th>
+                  <th className="w-36 px-3 py-3">集金グループ</th>
                   <th className="w-24 px-4 py-3">在籍</th>
                   <th className="w-16 px-4 py-3"></th>
                 </tr>
@@ -208,24 +208,24 @@ export default function MembersScreen() {
                     </td>
                     <td className="px-3 py-2">
                       <Select
-                        value={r.group}
-                        onChange={(e) => updateGroup(r.id, e.target.value)}
+                        value={r.dorm || ''}
+                        onChange={(e) => updateDorm(r.id, e.target.value)}
                       >
-                        {GROUPS.map((g) => (
-                          <option key={g} value={g}>
-                            {g}
+                        {DORMS.map((d) => (
+                          <option key={d} value={d}>
+                            {d}
                           </option>
                         ))}
                       </Select>
                     </td>
                     <td className="px-3 py-2">
                       <Select
-                        value={r.dorm || ''}
-                        onChange={(e) => update(r.id, 'dorm', e.target.value)}
+                        value={r.group}
+                        onChange={(e) => update(r.id, 'group', e.target.value)}
                       >
-                        {DORMS.map((d) => (
-                          <option key={d} value={d}>
-                            {d}
+                        {GROUPS.map((g) => (
+                          <option key={g} value={g}>
+                            {g}
                           </option>
                         ))}
                       </Select>

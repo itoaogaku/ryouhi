@@ -15,10 +15,11 @@ export const RANKS = [
 // 集金グループ（PDFの改ページ単位もこの順）
 export const GROUPS = ['3階', '2階', '2寮', '女子寮']
 
-// 集金グループを選ぶと自動で確定する所属寮
-// （キーに無いグループを選んだ場合は寮の値を変更しない）
-export const DORM_BY_GROUP = {
+// 所属寮を選ぶと自動で確定する集金グループ
+// （キーに無い寮を選んだ場合は集金グループの値を変更しない）
+export const GROUP_BY_DORM = {
   '2寮': '2寮',
+  '女子寮': '女子寮',
 }
 
 // 旧グループ名からの移行用（表示・PDF出力から古い値が漏れないように）
@@ -30,7 +31,7 @@ export const GROUP_ALIASES = {
 export const GRADES = ['1年', '2年', '3年', '4年']
 
 // 所属寮
-export const DORMS = ['1寮', '2寮']
+export const DORMS = ['1寮', '2寮', '女子寮']
 
 // 寮生以外に食事をとる人の種別（食数管理の「追加の食数」欄で使用）
 export const GUEST_CATEGORIES = ['見学高校生', '寮外生', '寮管']
