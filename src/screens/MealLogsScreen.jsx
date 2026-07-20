@@ -122,26 +122,51 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
     return pop
   }, [activeMembers, dorm, filterGroup, filterRank])
 
-  // 火〜土曜=朝夕、日曜=朝のみ、月曜=提供なし の標準スケジュールを
-  // 当月の全日程に一括反映する（guests には触れない）
+  // 既に何らかの記録（朝食・夕食いずれかにチェック）がある「日付×メンバー」の組み合わせ
+  const existingLogKeys = useMemo(() => {
+    const set = new Set()
+    for (const log of mealLogs) {
+      if ((log.dorm || '') !== dorm) continue
+      if (!log.breakfast && !log.dinner) continue
+      set.add(`${log.date}__${log.member_id}`)
+    }
+    return set
+  }, [mealLogs, dorm])
+
+  // 火〜土曜=朝夕、日曜=朝のみ、月曜=提供なし の標準スケジュールのうち、
+  // まだ記録の無い「日付×メンバー」だけを対象にした一覧（安全のため上書きしない）
+  const pendingScheduleLogs = useMemo(() => {
+    const logs = []
+    for (const m of schedulePopulation) {
+      for (let d = 1; d <= totalDays; d++) {
+        const date = toDateStr(year, month, d)
+        if (existingLogKeys.has(`${date}__${m.id}`)) continue
+        const dow = weekdayOf(year, month, d)
+        const sched = STANDARD_MEAL_SCHEDULE[dow]
+        // 朝夕とも提供なしの日（月曜）は記録自体が残らないため対象外
+        if (!sched.breakfast && !sched.dinner) continue
+        logs.push({
+          date,
+          member_id: m.id,
+          dorm,
+          breakfast: sched.breakfast,
+          dinner: sched.dinner,
+        })
+      }
+    }
+    return logs
+  }, [schedulePopulation, existingLogKeys, dorm, totalDays, year, month])
+
+  // 未入力の日付×メンバーにだけ標準スケジュールを一括反映する
+  // （既に入力済みの日は一切変更しない。guests にも触れない）
   const applyStandardSchedule = async () => {
+    if (pendingScheduleLogs.length === 0) {
+      setShowScheduleConfirm(false)
+      return
+    }
     setApplyingSchedule(true)
     try {
-      const logs = []
-      for (const m of schedulePopulation) {
-        for (let d = 1; d <= totalDays; d++) {
-          const dow = weekdayOf(year, month, d)
-          const sched = STANDARD_MEAL_SCHEDULE[dow]
-          logs.push({
-            date: toDateStr(year, month, d),
-            member_id: m.id,
-            dorm,
-            breakfast: sched.breakfast,
-            dinner: sched.dinner,
-          })
-        }
-      }
-      await saveMealLogs(logs, [], null, dorm)
+      await saveMealLogs(pendingScheduleLogs, [], null, dorm)
       setShowScheduleConfirm(false)
     } finally {
       setApplyingSchedule(false)
@@ -352,29 +377,36 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
               </Button>
               <Button
                 onClick={applyStandardSchedule}
-                disabled={applyingSchedule || schedulePopulation.length === 0}
+                disabled={applyingSchedule || pendingScheduleLogs.length === 0}
               >
                 {applyingSchedule
                   ? '反映中...'
-                  : `反映する（${schedulePopulation.length}名）`}
+                  : pendingScheduleLogs.length === 0
+                  ? '未入力の日はありません'
+                  : `反映する（未入力 ${pendingScheduleLogs.length}件）`}
               </Button>
             </div>
           }
         >
           <div className="space-y-3 text-sm text-slate-600">
             <p>
-              {formatYearMonthJa(year, month)}の {dorm} について、以下の標準
-              スケジュールを当月の全日程に一括反映します。
+              {formatYearMonthJa(year, month)}の {dorm}
+              （対象 {schedulePopulation.length}名）について、
+              <strong>まだ記録の無い日にだけ</strong>
+              以下の標準スケジュールを一括で入力します。
             </p>
             <ul className="list-disc space-y-1 pl-5">
               <li>火曜〜土曜：朝食・夕食あり</li>
               <li>日曜：朝食のみ</li>
               <li>月曜：提供なし</li>
             </ul>
-            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-700">
-              この寮の当月分の食数記録は、既存のチェックも含めてすべてこの
-              スケジュールで上書きされます。個別の欠席や特別対応は、反映後に
-              手動で調整してください。
+            <p className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-primary">
+              安全のため、既に朝食・夕食のいずれかにチェックが入っている日は
+              上書きしません。欠席や特別対応を反映済みの日はそのまま残ります。
+            </p>
+            <p className="text-xs text-slate-400">
+              未入力の対象：{pendingScheduleLogs.length}件（{schedulePopulation.length}
+              名 ×最大{totalDays}日のうち）
             </p>
           </div>
         </Modal>
