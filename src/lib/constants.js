@@ -30,8 +30,25 @@ export const GROUP_ALIASES = {
 // 学年
 export const GRADES = ['1年', '2年', '3年', '4年']
 
-// 所属寮
+// 所属寮（寮生マスターの「寮」プルダウン用。居住区分）
 export const DORMS = ['1寮', '2寮', '女子寮']
+
+// 食数管理の入力タブ・調理人向け集計がある「食事をとる場所」としての寮
+// （女子寮は専用の食堂タブを持たず、1寮で食事をするため対象外）
+export const MEAL_TRACKING_DORMS = ['1寮', '2寮']
+
+// 所属寮 → 実際に食事をとる寮 の対応
+// （女子寮の選手は1寮で食事をするため、食数管理・調理人向け集計では
+// 「1寮所属」と同じ扱いにする）
+export const MEAL_DORM_OVERRIDES = {
+  '女子寮': '1寮',
+}
+
+// メンバーの所属寮から、実際に食事をとる寮を求める
+export function mealDormOf(member) {
+  const dorm = member?.dorm || ''
+  return MEAL_DORM_OVERRIDES[dorm] || dorm
+}
 
 // 寮生以外に食事をとる人の種別（食数管理の「追加の食数」欄で使用）
 export const GUEST_CATEGORIES = ['見学高校生', '寮外生', '寮管']

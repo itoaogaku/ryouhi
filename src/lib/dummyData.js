@@ -1,4 +1,4 @@
-import { RANKS, GROUPS, GRADES, DORMS, DEFAULT_CONFIG } from './constants.js'
+import { RANKS, GROUPS, GRADES, DORMS, DEFAULT_CONFIG, mealDormOf } from './constants.js'
 import { daysInMonth, toDateStr, toYearMonth } from './utils.js'
 
 // -------------------------------------------------------------
@@ -66,7 +66,7 @@ function generateMealLogs(members, year, month) {
     if (!m.active) continue
     // メンバーごとに擬似ランダムな喫食率
     const seed = m.id * 7
-    const homeDorm = m.dorm || '1寮'
+    const homeDorm = mealDormOf(m) || '1寮'
     for (let d = 1; d <= lastDay; d++) {
       const date = toDateStr(year, month, d)
       const dow = new Date(year, month - 1, d).getDay()

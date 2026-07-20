@@ -13,7 +13,7 @@ import {
   Table2,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
-import { RANKS, GROUPS, GUEST_CATEGORIES } from '../lib/constants.js'
+import { RANKS, GROUPS, GUEST_CATEGORIES, mealDormOf } from '../lib/constants.js'
 import {
   Button,
   Card,
@@ -121,9 +121,10 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
   const filtered = activeMembers.filter((m) => {
     if (filterGroup !== 'all' && m.group !== filterGroup) return false
     if (filterRank !== 'all' && m.rank !== filterRank) return false
-    // 表示範囲: home = この寮の所属 or この寮での喫食者、all = 全寮生
+    // 表示範囲: home = この寮で食事をする人 or この寮での喫食者、all = 全寮生
+    // （女子寮所属は1寮で食事をするため、1寮では「所属」として扱う）
     if (scope === 'home') {
-      const isHome = (m.dorm || '') === dorm
+      const isHome = mealDormOf(m) === dorm
       if (!isHome && !ateHereIds.has(String(m.id))) return false
     }
     return true
@@ -442,7 +443,7 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
               <tbody>
                 {filtered.map((m) => {
                   const v = getVal(m.id)
-                  const isCrossDorm = (m.dorm || '') !== dorm
+                  const isCrossDorm = mealDormOf(m) !== dorm
                   return (
                     <tr
                       key={m.id}

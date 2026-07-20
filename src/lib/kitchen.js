@@ -1,4 +1,4 @@
-import { DORMS, GUEST_CATEGORIES } from './constants.js'
+import { MEAL_TRACKING_DORMS, GUEST_CATEGORIES } from './constants.js'
 
 // -------------------------------------------------------------
 // 調理人向け食数集計ロジック
@@ -53,7 +53,7 @@ function summarizeGuestsForDormCategory(guestMeals, date, dorm, category) {
 // 指定日の食数を寮×種別で取りまとめる
 export function buildKitchenSummary({ members, mealLogs, guestMeals, date }) {
   const activeMembers = members.filter((m) => m.active)
-  const dormRows = DORMS.map((dorm) => {
+  const dormRows = MEAL_TRACKING_DORMS.map((dorm) => {
     const memberRow = summarizeMembersForDorm(
       activeMembers,
       mealLogs,

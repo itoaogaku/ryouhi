@@ -1,4 +1,5 @@
 import { daysInMonth, toDateStr } from './utils.js'
+import { mealDormOf } from './constants.js'
 
 // -------------------------------------------------------------
 // 月間食数マトリクス（縦軸=名前、横軸=日付）を組み立てるロジック
@@ -30,7 +31,7 @@ export function buildMonthlyMealMatrix({
   }
 
   let population = activeMembers.filter(
-    (m) => (m.dorm || '') === dorm || eaterIds.has(String(m.id))
+    (m) => mealDormOf(m) === dorm || eaterIds.has(String(m.id))
   )
   if (filterGroup !== 'all') {
     population = population.filter((m) => m.group === filterGroup)
@@ -68,7 +69,7 @@ export function buildMonthlyMealMatrix({
         name: m.name,
         group: m.group,
         rank: m.rank,
-        isCrossDorm: (m.dorm || '') !== dorm,
+        isCrossDorm: mealDormOf(m) !== dorm,
         cells,
         totalBreakfast,
         totalDinner,
