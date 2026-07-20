@@ -1,8 +1,25 @@
 // 汎用ユーティリティ
 
+import { GRADES } from './constants.js'
+
 // className を結合する簡易 helper（shadcn の cn 相当）
 export function cn(...classes) {
   return classes.filter(Boolean).join(' ')
+}
+
+// 学年・読み仮名順の比較関数（一覧・PDFの基本の並び順）
+// 学年は GRADES の順番（不明な学年は最後）、同学年内は読み仮名（無ければ氏名）の五十音順
+export function compareMembersByGradeKana(a, b) {
+  const gi = (m) => {
+    const idx = GRADES.indexOf(m?.grade)
+    return idx === -1 ? GRADES.length : idx
+  }
+  const ga = gi(a)
+  const gb = gi(b)
+  if (ga !== gb) return ga - gb
+  const ka = a?.name_kana || a?.name || ''
+  const kb = b?.name_kana || b?.name || ''
+  return ka.localeCompare(kb, 'ja')
 }
 
 // 数値を「¥1,234」形式にフォーマット

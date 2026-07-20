@@ -1,4 +1,4 @@
-import { daysInMonth, toDateStr } from './utils.js'
+import { daysInMonth, toDateStr, compareMembersByGradeKana } from './utils.js'
 import { mealDormOf } from './constants.js'
 
 // -------------------------------------------------------------
@@ -53,6 +53,8 @@ export function buildMonthlyMealMatrix({
   }
 
   const rows = population
+    .slice()
+    .sort(compareMembersByGradeKana)
     .map((m) => {
       const dayMap = lookup.get(String(m.id)) || new Map()
       let totalBreakfast = 0
@@ -75,7 +77,8 @@ export function buildMonthlyMealMatrix({
         totalDinner,
       }
     })
-    // 所属寮のメンバーを先に、氏名順ではなく元の並び（ID順）を維持
+    // 所属寮のメンバーを先に（Array#sort は安定ソートのため、事前に適用した
+    // 学年・読み仮名順を保ったまま「寮間移動」だけ下に回す）
     .sort((a, b) => Number(a.isCrossDorm) - Number(b.isCrossDorm))
 
   const columnTotals = days.map((d, idx) => {

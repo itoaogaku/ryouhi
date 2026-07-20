@@ -24,8 +24,8 @@
 var SHEETS = {
   members: {
     name: 'members',
-    // grade / dorm は既存データの列位置を崩さないよう末尾に追加
-    headers: ['id', 'name', 'rank', 'group', 'active', 'grade', 'dorm'],
+    // grade / dorm / name_kana は既存データの列位置を崩さないよう末尾に追加
+    headers: ['id', 'name', 'rank', 'group', 'active', 'grade', 'dorm', 'name_kana'],
   },
   meal_logs: {
     name: 'meal_logs',
@@ -644,6 +644,7 @@ function saveMembers(members) {
         toBool_(m.active),
         String(m.grade || ''),
         String(m.dorm || ''),
+        String(m.name_kana || ''),
       ];
     });
     // ループ内 setValue を避け setValues で一括書き込み
@@ -896,6 +897,7 @@ function readMembers_() {
       active: toBool_(r[4]),
       grade: r[5] != null ? String(r[5]) : '',
       dorm: r[6] != null ? String(r[6]) : '',
+      name_kana: r[7] != null ? String(r[7]) : '',
     });
   }
   return out;

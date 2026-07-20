@@ -42,6 +42,7 @@ import {
   formatYearMonthJa,
   uid,
   cn,
+  compareMembersByGradeKana,
 } from '../lib/utils.js'
 import MonthlyMealMatrix from '../components/MonthlyMealMatrix.jsx'
 import MealListSheet from '../components/MealListSheet.jsx'
@@ -243,18 +244,21 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
     return set
   }, [mealLogs, dateStr, dorm])
 
-  const filtered = activeMembers.filter((m) => {
-    if (filterGroup !== 'all' && m.group !== filterGroup) return false
-    if (filterRank !== 'all' && m.rank !== filterRank) return false
-    if (nameSearch.trim() && !m.name.includes(nameSearch.trim())) return false
-    // 表示範囲: home = この寮で食事をする人 or この寮での喫食者、all = 全寮生
-    // （女子寮所属は1寮で食事をするため、1寮では「所属」として扱う）
-    if (scope === 'home') {
-      const isHome = mealDormOf(m) === dorm
-      if (!isHome && !ateHereIds.has(String(m.id))) return false
-    }
-    return true
-  })
+  const filtered = activeMembers
+    .filter((m) => {
+      if (filterGroup !== 'all' && m.group !== filterGroup) return false
+      if (filterRank !== 'all' && m.rank !== filterRank) return false
+      if (nameSearch.trim() && !m.name.includes(nameSearch.trim())) return false
+      // 表示範囲: home = この寮で食事をする人 or この寮での喫食者、all = 全寮生
+      // （女子寮所属は1寮で食事をするため、1寮では「所属」として扱う）
+      if (scope === 'home') {
+        const isHome = mealDormOf(m) === dorm
+        if (!isHome && !ateHereIds.has(String(m.id))) return false
+      }
+      return true
+    })
+    .slice()
+    .sort(compareMembersByGradeKana)
 
   const getVal = (id) =>
     draft[String(id)] || { breakfast: false, dinner: false }

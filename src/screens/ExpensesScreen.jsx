@@ -33,6 +33,7 @@ import {
   num,
   uid,
   cn,
+  compareMembersByGradeKana,
 } from '../lib/utils.js'
 import { medicalNet, tournamentItemNet, campItemCost } from '../lib/calc.js'
 
@@ -391,9 +392,10 @@ export default function ExpensesScreen() {
     setDirty(false)
   }
 
-  const filtered = activeMembers.filter(
-    (m) => filterGroup === 'all' || m.group === filterGroup
-  )
+  const filtered = activeMembers
+    .filter((m) => filterGroup === 'all' || m.group === filterGroup)
+    .slice()
+    .sort(compareMembersByGradeKana)
 
   if (loading) return <LoadingState />
 
@@ -746,7 +748,10 @@ function BulkAddDialog({
 
   const membersByGroup = GROUPS.map((group) => ({
     group,
-    list: members.filter((m) => m.group === group),
+    list: members
+      .filter((m) => m.group === group)
+      .slice()
+      .sort(compareMembersByGradeKana),
   })).filter((g) => g.list.length > 0)
 
   return (

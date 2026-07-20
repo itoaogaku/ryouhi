@@ -1,4 +1,5 @@
 import { MEAL_TRACKING_DORMS, GUEST_CATEGORIES } from './constants.js'
+import { compareMembersByGradeKana } from './utils.js'
 
 // -------------------------------------------------------------
 // 調理人向け食数集計ロジック
@@ -11,7 +12,7 @@ import { MEAL_TRACKING_DORMS, GUEST_CATEGORIES } from './constants.js'
 function summarizeMembersForDorm(members, mealLogs, date, dorm) {
   let breakfast = 0
   let dinner = 0
-  const names = []
+  const entries = []
   for (const log of mealLogs) {
     if (log.date !== date) continue
     if ((log.dorm || '') !== dorm) continue
@@ -20,12 +21,15 @@ function summarizeMembersForDorm(members, mealLogs, date, dorm) {
     if (!member) continue
     if (log.breakfast) breakfast += 1
     if (log.dinner) dinner += 1
-    names.push({
+    entries.push({
+      member,
       name: member.name,
       breakfast: !!log.breakfast,
       dinner: !!log.dinner,
     })
   }
+  entries.sort((a, b) => compareMembersByGradeKana(a.member, b.member))
+  const names = entries.map(({ name, breakfast, dinner }) => ({ name, breakfast, dinner }))
   return { breakfast, dinner, names }
 }
 

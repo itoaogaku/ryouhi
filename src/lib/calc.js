@@ -1,4 +1,4 @@
-import { num } from './utils.js'
+import { num, compareMembersByGradeKana } from './utils.js'
 
 // -------------------------------------------------------------
 // 清算計算ロジック
@@ -164,6 +164,8 @@ export function buildSettlementRows({
 
   return members
     .filter((m) => m.active)
+    .slice()
+    .sort(compareMembersByGradeKana)
     .map((member) => {
       const expense = expenseByMember.get(String(member.id))
       const tournaments = tournamentsByMember.get(String(member.id)) || []

@@ -11,7 +11,7 @@ import {
   Badge,
   Skeleton,
 } from '../components/ui/index.jsx'
-import { cn } from '../lib/utils.js'
+import { cn, compareMembersByGradeKana } from '../lib/utils.js'
 
 // 画面A：寮生マスター管理
 export default function MembersScreen() {
@@ -57,6 +57,7 @@ export default function MembersScreen() {
       {
         id: nextId,
         name: '',
+        name_kana: '',
         rank: RANKS[0],
         grade: GRADES[0],
         group: GROUPS[0],
@@ -87,12 +88,15 @@ export default function MembersScreen() {
     }
   }
 
-  const filtered = rows.filter((r) => {
-    if (filterGroup !== 'all' && r.group !== filterGroup) return false
-    if (filterActive === 'active' && !r.active) return false
-    if (filterActive === 'inactive' && r.active) return false
-    return true
-  })
+  const filtered = rows
+    .filter((r) => {
+      if (filterGroup !== 'all' && r.group !== filterGroup) return false
+      if (filterActive === 'active' && !r.active) return false
+      if (filterActive === 'inactive' && r.active) return false
+      return true
+    })
+    .slice()
+    .sort(compareMembersByGradeKana)
 
   const activeCount = rows.filter((r) => r.active).length
 
@@ -150,11 +154,12 @@ export default function MembersScreen() {
       <Card>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-sm">
+            <table className="w-full min-w-[1050px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium text-slate-500">
                   <th className="w-14 px-4 py-3">ID</th>
                   <th className="px-4 py-3">氏名</th>
+                  <th className="px-4 py-3">読み仮名</th>
                   <th className="w-24 px-3 py-3">学年</th>
                   <th className="w-36 px-3 py-3">チームランク</th>
                   <th className="w-24 px-3 py-3">寮</th>
@@ -180,6 +185,13 @@ export default function MembersScreen() {
                         value={r.name}
                         placeholder="氏名を入力"
                         onChange={(e) => update(r.id, 'name', e.target.value)}
+                      />
+                    </td>
+                    <td className="px-4 py-2">
+                      <Input
+                        value={r.name_kana || ''}
+                        placeholder="よみがな"
+                        onChange={(e) => update(r.id, 'name_kana', e.target.value)}
                       />
                     </td>
                     <td className="px-3 py-2">
@@ -258,7 +270,7 @@ export default function MembersScreen() {
                 {filtered.length === 0 && (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={9}
                       className="px-4 py-10 text-center text-sm text-muted-foreground"
                     >
                       該当するメンバーがいません
