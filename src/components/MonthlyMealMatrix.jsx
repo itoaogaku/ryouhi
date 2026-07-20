@@ -98,7 +98,7 @@ export default function MonthlyMealMatrix({
                       <div className="whitespace-nowrap">{row.name}</div>
                       {row.isCrossDorm && (
                         <div className="text-[10px] font-normal text-amber-600">
-                          他寮所属
+                          寮間移動
                         </div>
                       )}
                     </td>

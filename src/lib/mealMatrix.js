@@ -5,7 +5,7 @@ import { mealDormOf } from './constants.js'
 // 月間食数マトリクス（縦軸=名前、横軸=日付）を組み立てるロジック
 // -------------------------------------------------------------
 // 指定寮・指定年月について、在籍寮生（+この寮で1度でも食べた
-// 他寮所属者）を行、日付を列とした一覧表データを生成する。
+// 寮間移動者）を行、日付を列とした一覧表データを生成する。
 // -------------------------------------------------------------
 
 export function buildMonthlyMealMatrix({
@@ -22,7 +22,7 @@ export function buildMonthlyMealMatrix({
 
   const activeMembers = members.filter((m) => m.active)
 
-  // この寮で当月1度でも食べた「他寮所属」メンバーIDを収集
+  // この寮で当月1度でも食べた「寮間移動」メンバーIDを収集
   const eaterIds = new Set()
   for (const log of mealLogs) {
     if ((log.dorm || '') !== dorm) continue

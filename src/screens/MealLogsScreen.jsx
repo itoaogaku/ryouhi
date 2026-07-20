@@ -72,6 +72,8 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
   const [day, setDay] = useState(defaultDay)
   const [filterGroup, setFilterGroup] = useState('all')
   const [filterRank, setFilterRank] = useState('all')
+  // 氏名検索（寮間移動で他寮から来た選手を「全寮生」表示からすぐ探すため）
+  const [nameSearch, setNameSearch] = useState('')
   // 表示範囲: 'home' = この寮の所属＋喫食者 / 'all' = 全寮生
   const [scope, setScope] = useState('home')
   // 表示モード: 'daily' = 日別入力 / 'monthly' = 月間一覧表（名前×日付）
@@ -226,7 +228,7 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
     }
   }
 
-  // この寮で当日すでに喫食記録があるメンバー（他寮所属でも表示する）
+  // この寮で当日すでに喫食記録があるメンバー（寮間移動で食べた人も表示する）
   const ateHereIds = useMemo(() => {
     const set = new Set()
     for (const log of mealLogs) {
@@ -244,6 +246,7 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
   const filtered = activeMembers.filter((m) => {
     if (filterGroup !== 'all' && m.group !== filterGroup) return false
     if (filterRank !== 'all' && m.rank !== filterRank) return false
+    if (nameSearch.trim() && !m.name.includes(nameSearch.trim())) return false
     // 表示範囲: home = この寮で食事をする人 or この寮での喫食者、all = 全寮生
     // （女子寮所属は1寮で食事をするため、1寮では「所属」として扱う）
     if (scope === 'home') {
@@ -375,7 +378,8 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
           {dorm} の食数管理
         </span>
         <span className="text-xs text-muted-foreground">
-          （この寮で食べた人を記録。他寮の人が食べた場合は「全寮生」表示で追加できます）
+          （この寮で食べた人を記録。他の寮の選手が寮間移動でここで食べた場合は
+          「全寮生」表示から探して追加できます）
         </span>
       </div>
 
@@ -583,8 +587,14 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
             title="表示範囲"
           >
             <option value="home">{dorm}所属＋喫食者</option>
-            <option value="all">全寮生（他寮を含む）</option>
+            <option value="all">全寮生（寮間移動を含む）</option>
           </Select>
+          <Input
+            value={nameSearch}
+            onChange={(e) => setNameSearch(e.target.value)}
+            placeholder="氏名で検索（寮間移動の選手を探す時に便利）"
+            className="w-64"
+          />
         </div>
 
         <div className="flex items-center gap-2">
@@ -663,7 +673,7 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
                           )}
                         >
                           {m.dorm || '—'}
-                          {isCrossDorm && '（他寮）'}
+                          {isCrossDorm && '（寮間移動）'}
                         </span>
                       </td>
                       <td className="px-4 py-2 text-slate-500">{m.rank}</td>

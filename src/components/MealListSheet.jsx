@@ -210,7 +210,7 @@ function Page({ dorm, year, month, days, rows, pageIndex, pageCount }) {
                 {r.name}
                 {r.isCrossDorm && (
                   <span style={{ fontSize: 8, fontWeight: 400, color: '#b45309', marginLeft: 4 }}>
-                    （他寮）
+                    （寮間移動）
                   </span>
                 )}
               </td>
