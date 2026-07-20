@@ -6,8 +6,8 @@ import React, {
   useCallback,
 } from 'react'
 import * as api from '../lib/api.js'
-import { toYearMonth } from '../lib/utils.js'
-import { DEFAULT_CONFIG } from '../lib/constants.js'
+import { toYearMonth, normalizeGroup } from '../lib/utils.js'
+import { DEFAULT_CONFIG, GROUP_ALIASES } from '../lib/constants.js'
 
 const AppContext = createContext(null)
 
@@ -57,7 +57,12 @@ export function AppProvider({ children, onAuthError }) {
     setError(null)
     try {
       const data = await api.getInitialData(year, month, yearMonth)
-      setMembers(data.members || [])
+      setMembers(
+        (data.members || []).map((m) => ({
+          ...m,
+          group: normalizeGroup(m.group, GROUP_ALIASES),
+        }))
+      )
       setConfig({ ...DEFAULT_CONFIG, ...(data.config || {}) })
       setMealLogs(data.mealLogs || [])
       setGuestMeals(data.guestMeals || [])

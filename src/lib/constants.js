@@ -8,11 +8,23 @@ export const RANKS = [
   '2軍B',
   '育成A',
   '育成B',
+  '女子選手',
   'マネージャー',
 ]
 
 // 集金グループ（PDFの改ページ単位もこの順）
-export const GROUPS = ['1階3階', '2階', '2寮', '女子寮']
+export const GROUPS = ['3階', '2階', '2寮', '女子寮']
+
+// 集金グループを選ぶと自動で確定する所属寮
+// （キーに無いグループを選んだ場合は寮の値を変更しない）
+export const DORM_BY_GROUP = {
+  '2寮': '2寮',
+}
+
+// 旧グループ名からの移行用（表示・PDF出力から古い値が漏れないように）
+export const GROUP_ALIASES = {
+  '1階3階': '3階',
+}
 
 // 学年
 export const GRADES = ['1年', '2年', '3年', '4年']

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Plus, Trash2, Save, UserPlus, RotateCcw } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
-import { RANKS, GROUPS, GRADES, DORMS } from '../lib/constants.js'
+import { RANKS, GROUPS, GRADES, DORMS, DORM_BY_GROUP } from '../lib/constants.js'
 import {
   Button,
   Card,
@@ -30,6 +30,22 @@ export default function MembersScreen() {
   const update = (id, field, value) => {
     setRows((prev) =>
       prev.map((r) => (r.id === id ? { ...r, [field]: value } : r))
+    )
+    setDirty(true)
+  }
+
+  // 集金グループを変更したとき、対応する寮が決まっていれば自動で合わせる
+  // （例: 集金グループを「2寮」にすると所属寮も自動で「2寮」になる）
+  const updateGroup = (id, value) => {
+    setRows((prev) =>
+      prev.map((r) => {
+        if (r.id !== id) return r
+        const next = { ...r, group: value }
+        if (DORM_BY_GROUP[value]) {
+          next.dorm = DORM_BY_GROUP[value]
+        }
+        return next
+      })
     )
     setDirty(true)
   }
@@ -193,7 +209,7 @@ export default function MembersScreen() {
                     <td className="px-3 py-2">
                       <Select
                         value={r.group}
-                        onChange={(e) => update(r.id, 'group', e.target.value)}
+                        onChange={(e) => updateGroup(r.id, e.target.value)}
                       >
                         {GROUPS.map((g) => (
                           <option key={g} value={g}>

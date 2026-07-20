@@ -88,3 +88,8 @@ export function emptyCampItem() {
 export function emptyOtherItem() {
   return { uid: uid(), name: '', amount: 0 }
 }
+
+// 旧グループ名（例: 1階3階）を現在の名称（3階）に正規化する
+export function normalizeGroup(group, aliases) {
+  return (aliases && aliases[group]) || group
+}
