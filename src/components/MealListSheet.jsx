@@ -5,8 +5,9 @@ import { formatYearMonthJa, weekdayOf, WEEKDAY_JA } from '../lib/utils.js'
 // 食堂掲示用 月間食数一覧（A4横・複数ページ）
 // -------------------------------------------------------------
 // 名前(縦軸) × 日付(横軸) の一覧表。寮生が見て分かりやすいよう、
-// 各セルは「■=食べる／□=食べない」の大きめの四角で表現し、
-// 白黒印刷でも判読でき、変更があれば手書きで印をつけやすい形にする。
+// 各セルは「○=食べる（緑の輪郭線）／□=食べない」の大きめのマークで
+// 表現し、印刷インクを抑えつつ判読しやすく、変更があれば手書きで
+// 印をつけやすい形にする。
 // -------------------------------------------------------------
 
 const PAGE_W = 1123 // A4横 幅 (96dpi)
@@ -102,8 +103,9 @@ function Page({ dorm, year, month, days, rows, pageIndex, pageCount }) {
                 display: 'inline-block',
                 width: 12,
                 height: 12,
-                background: EAT_COLOR,
-                border: `1px solid ${EAT_COLOR}`,
+                borderRadius: '50%',
+                background: 'transparent',
+                border: `2px solid ${EAT_COLOR}`,
               }}
             />
             食べる
@@ -233,9 +235,10 @@ function Page({ dorm, year, month, days, rows, pageIndex, pageCount }) {
                         display: 'inline-block',
                         width: 13,
                         height: 13,
-                        background: c.breakfast ? EAT_COLOR : '#ffffff',
+                        borderRadius: c.breakfast ? '50%' : 0,
+                        background: 'transparent',
                         border: c.breakfast
-                          ? `1px solid ${EAT_COLOR}`
+                          ? `2px solid ${EAT_COLOR}`
                           : '1px solid #64748b',
                       }}
                     />
@@ -244,9 +247,10 @@ function Page({ dorm, year, month, days, rows, pageIndex, pageCount }) {
                         display: 'inline-block',
                         width: 13,
                         height: 13,
-                        background: c.dinner ? EAT_COLOR : '#ffffff',
+                        borderRadius: c.dinner ? '50%' : 0,
+                        background: 'transparent',
                         border: c.dinner
-                          ? `1px solid ${EAT_COLOR}`
+                          ? `2px solid ${EAT_COLOR}`
                           : '1px solid #64748b',
                       }}
                     />
