@@ -605,8 +605,63 @@ function createInitialAdmin(name, email, pin) {
 // API 実装
 // =============================================================
 
+// 初期データの読み込みキャッシュ（短時間の再読み込みを高速化する）
+// ロード時間短縮のため、同じ年月への読み込みは一定時間キャッシュから返す。
+// 書き込み系 API（保存）のあとは該当分のキャッシュを破棄して最新化する。
+var INITIAL_DATA_CACHE_TTL_SECONDS = 30;
+var INITIAL_DATA_CACHE_KEYS_KEY = 'initial_data_cache_keys';
+
+function initialDataCacheKey_(yearMonth) {
+  return 'initial_data_' + yearMonth;
+}
+
+// キャッシュした年月を記録しておき、全件破棄（メンバー保存時）に使う
+function trackInitialDataCacheKey_(cache, yearMonth) {
+  try {
+    var raw = cache.get(INITIAL_DATA_CACHE_KEYS_KEY);
+    var keys = raw ? JSON.parse(raw) : [];
+    if (keys.indexOf(yearMonth) === -1) {
+      keys.push(yearMonth);
+      cache.put(
+        INITIAL_DATA_CACHE_KEYS_KEY,
+        JSON.stringify(keys),
+        INITIAL_DATA_CACHE_TTL_SECONDS
+      );
+    }
+  } catch (e) {
+    // キャッシュ管理の失敗は致命的ではないため無視
+  }
+}
+
+// 指定年月のキャッシュを破棄（食数・経費の保存後に呼ぶ）
+function invalidateInitialDataCache_(yearMonth) {
+  CacheService.getScriptCache().remove(initialDataCacheKey_(yearMonth));
+}
+
+// 全年月のキャッシュを破棄（寮生マスターは全月に影響するため）
+function invalidateAllInitialDataCache_() {
+  var cache = CacheService.getScriptCache();
+  try {
+    var raw = cache.get(INITIAL_DATA_CACHE_KEYS_KEY);
+    var keys = raw ? JSON.parse(raw) : [];
+    if (keys.length) cache.removeAll(keys.map(initialDataCacheKey_));
+    cache.remove(INITIAL_DATA_CACHE_KEYS_KEY);
+  } catch (e) {
+    // 追跡情報が壊れていても致命的ではない
+  }
+}
+
 // 初期データ一括取得
 function getInitialData(yearMonth) {
+  var cache = CacheService.getScriptCache();
+  var cacheKey = initialDataCacheKey_(yearMonth);
+  try {
+    var cached = cache.get(cacheKey);
+    if (cached) return JSON.parse(cached);
+  } catch (e) {
+    // キャッシュ取得に失敗しても読み込み自体は継続する
+  }
+
   ensureSheets_();
   var members = readMembers_();
   var config = readConfig_();
@@ -616,7 +671,7 @@ function getInitialData(yearMonth) {
   var tournamentItems = readTournamentItems_(yearMonth);
   var campItems = readCampItems_(yearMonth);
   var otherItems = readOtherItems_(yearMonth);
-  return {
+  var result = {
     members: members,
     config: config,
     mealLogs: mealLogs,
@@ -626,6 +681,17 @@ function getInitialData(yearMonth) {
     campItems: campItems,
     otherItems: otherItems,
   };
+
+  try {
+    // CacheService は1件あたり100KB程度が上限。超える場合は例外になるため
+    // キャッシュを諦めて（catch して）そのまま結果を返す。
+    cache.put(cacheKey, JSON.stringify(result), INITIAL_DATA_CACHE_TTL_SECONDS);
+    trackInitialDataCacheKey_(cache, yearMonth);
+  } catch (e) {
+    // noop
+  }
+
+  return result;
 }
 
 // メンバーマスタ全置換保存
@@ -650,6 +716,7 @@ function saveMembers(members) {
     // ループ内 setValue を避け setValues で一括書き込み
     sheet.getRange(2, 1, rows.length, SHEETS.members.headers.length).setValues(rows);
   }
+  invalidateAllInitialDataCache_();
   return { saved: members.length };
 }
 
@@ -705,6 +772,7 @@ function saveMealLogs(yearMonth, logs, guests, date, dorm) {
     saveGuestMeals_(normDate_(date), dorm, guests);
   }
 
+  invalidateInitialDataCache_(yearMonth);
   return { saved: logs.length, total: out.length, guests: guests.length };
 }
 
@@ -848,6 +916,7 @@ function saveExpenses(yearMonth, expenses, tournamentItems, campItems, otherItem
     })
   );
 
+  invalidateInitialDataCache_(yearMonth);
   return {
     saved: expenses.length,
     tournamentItems: tournamentItems.length,

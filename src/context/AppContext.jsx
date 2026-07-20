@@ -4,6 +4,7 @@ import React, {
   useState,
   useEffect,
   useCallback,
+  useRef,
 } from 'react'
 import * as api from '../lib/api.js'
 import { toYearMonth, normalizeGroup } from '../lib/utils.js'
@@ -39,6 +40,11 @@ export function AppProvider({ children, onAuthError }) {
 
   const yearMonth = toYearMonth(year, month)
 
+  // 年月ごとの初期データキャッシュ（体感ロード時間短縮用）。
+  // 一度読み込んだ年月に戻ったときは、まずキャッシュを即表示してから
+  // 裏で最新データを取得して静かに差し替える（stale-while-revalidate）。
+  const cacheRef = useRef({})
+
   const showToast = useCallback((message, type = 'success') => {
     setToast({ message, type, id: Date.now() })
     setTimeout(() => setToast(null), 3000)
@@ -52,32 +58,45 @@ export function AppProvider({ children, onAuthError }) {
     [onAuthError]
   )
 
+  const applyData = useCallback((data) => {
+    setMembers(
+      (data.members || []).map((m) => ({
+        ...m,
+        group: normalizeGroup(m.group, GROUP_ALIASES),
+      }))
+    )
+    setConfig({ ...DEFAULT_CONFIG, ...(data.config || {}) })
+    setMealLogs(data.mealLogs || [])
+    setGuestMeals(data.guestMeals || [])
+    setExpenses(data.expenses || [])
+    setTournamentItems(data.tournamentItems || [])
+    setCampItems(data.campItems || [])
+    setOtherItems(data.otherItems || [])
+  }, [])
+
   const reload = useCallback(async () => {
-    setLoading(true)
+    const cached = cacheRef.current[yearMonth]
+    if (cached) {
+      // 訪問済みの年月はキャッシュを即表示（ローディング画面を出さない）
+      applyData(cached)
+      setLoading(false)
+    } else {
+      setLoading(true)
+    }
     setError(null)
     try {
       const data = await api.getInitialData(year, month, yearMonth)
-      setMembers(
-        (data.members || []).map((m) => ({
-          ...m,
-          group: normalizeGroup(m.group, GROUP_ALIASES),
-        }))
-      )
-      setConfig({ ...DEFAULT_CONFIG, ...(data.config || {}) })
-      setMealLogs(data.mealLogs || [])
-      setGuestMeals(data.guestMeals || [])
-      setExpenses(data.expenses || [])
-      setTournamentItems(data.tournamentItems || [])
-      setCampItems(data.campItems || [])
-      setOtherItems(data.otherItems || [])
+      cacheRef.current[yearMonth] = data
+      applyData(data)
     } catch (e) {
       console.error(e)
       checkAuthError(e)
-      setError(e.message || 'データの取得に失敗しました')
+      // キャッシュを即表示できていた場合は、裏更新の失敗でエラー画面にはしない
+      if (!cached) setError(e.message || 'データの取得に失敗しました')
     } finally {
       setLoading(false)
     }
-  }, [year, month, yearMonth, checkAuthError])
+  }, [year, month, yearMonth, checkAuthError, applyData])
 
   useEffect(() => {
     reload()
@@ -93,14 +112,20 @@ export function AppProvider({ children, onAuthError }) {
         throw e
       }
       setMembers(next)
+      // 寮生マスターは全年月に影響するため、キャッシュ済みの全年月へ反映する
+      for (const ym of Object.keys(cacheRef.current)) {
+        cacheRef.current[ym] = { ...cacheRef.current[ym], members: next }
+      }
       showToast('寮生マスターを保存しました')
     },
     [showToast, checkAuthError]
   )
 
   // logs: メンバー食数（当日×寮）, guests: 見学高校生（当日×寮）, date: 対象日, dorm: 対象寮
+  // options.silent: true の場合、成功トーストを出さない（自動保存用）
+  // options.toastMessage: 成功トーストの文言を差し替える
   const saveMealLogs = useCallback(
-    async (logs, guests = [], date = null, dorm = '') => {
+    async (logs, guests = [], date = null, dorm = '', options = {}) => {
       try {
         await api.saveMealLogs(yearMonth, logs, guests, date, dorm)
       } catch (e) {
@@ -108,16 +133,17 @@ export function AppProvider({ children, onAuthError }) {
         throw e
       }
       // メンバー食数を UPSERT 更新（key: date+member+dorm）
-      setMealLogs((prev) => {
-        const key = (l) => `${l.date}__${l.member_id}__${l.dorm || ''}`
-        const map = new Map(prev.map((l) => [key(l), l]))
-        for (const l of logs) {
-          if (l.breakfast || l.dinner) map.set(key(l), l)
-          else map.delete(key(l))
-        }
-        return Array.from(map.values())
-      })
+      const key = (l) => `${l.date}__${l.member_id}__${l.dorm || ''}`
+      const map = new Map(mealLogs.map((l) => [key(l), l]))
+      for (const l of logs) {
+        if (l.breakfast || l.dinner) map.set(key(l), l)
+        else map.delete(key(l))
+      }
+      const nextMealLogs = Array.from(map.values())
+      setMealLogs(nextMealLogs)
+
       // 寮生以外（見学高校生・寮外生・寮管）は当日×寮を総入れ替え
+      let nextGuestMeals = guestMeals
       if (date) {
         const d = dorm || ''
         const valid = guests
@@ -133,14 +159,28 @@ export function AppProvider({ children, onAuthError }) {
             breakfast: !!g.breakfast,
             dinner: !!g.dinner,
           }))
-        setGuestMeals((prev) => [
-          ...prev.filter((g) => !(g.date === date && (g.dorm || '') === d)),
+        nextGuestMeals = [
+          ...guestMeals.filter((g) => !(g.date === date && (g.dorm || '') === d)),
           ...valid,
-        ])
+        ]
+        setGuestMeals(nextGuestMeals)
       }
-      showToast('食数データを保存しました')
+
+      // この年月をキャッシュ済みなら、保存内容をそのまま反映しておく
+      const entry = cacheRef.current[yearMonth]
+      if (entry) {
+        cacheRef.current[yearMonth] = {
+          ...entry,
+          mealLogs: nextMealLogs,
+          guestMeals: nextGuestMeals,
+        }
+      }
+
+      if (!options.silent) {
+        showToast(options.toastMessage || '食数データを保存しました')
+      }
     },
-    [yearMonth, showToast, checkAuthError]
+    [yearMonth, mealLogs, guestMeals, showToast, checkAuthError]
   )
 
   // payload: { expenses, tournamentItems, campItems, otherItems }
@@ -158,25 +198,48 @@ export function AppProvider({ children, onAuthError }) {
         campItems: nextCamps = [],
         otherItems: nextOthers = [],
       } = payload
-      setExpenses((prev) => [
-        ...prev.filter((e) => e.year_month !== yearMonth),
+      const mergedExpenses = [
+        ...expenses.filter((e) => e.year_month !== yearMonth),
         ...nextExpenses,
-      ])
-      setTournamentItems((prev) => [
-        ...prev.filter((i) => i.year_month !== yearMonth),
+      ]
+      const mergedTournaments = [
+        ...tournamentItems.filter((i) => i.year_month !== yearMonth),
         ...nextTournaments,
-      ])
-      setCampItems((prev) => [
-        ...prev.filter((i) => i.year_month !== yearMonth),
+      ]
+      const mergedCamps = [
+        ...campItems.filter((i) => i.year_month !== yearMonth),
         ...nextCamps,
-      ])
-      setOtherItems((prev) => [
-        ...prev.filter((i) => i.year_month !== yearMonth),
+      ]
+      const mergedOthers = [
+        ...otherItems.filter((i) => i.year_month !== yearMonth),
         ...nextOthers,
-      ])
+      ]
+      setExpenses(mergedExpenses)
+      setTournamentItems(mergedTournaments)
+      setCampItems(mergedCamps)
+      setOtherItems(mergedOthers)
+
+      const entry = cacheRef.current[yearMonth]
+      if (entry) {
+        cacheRef.current[yearMonth] = {
+          ...entry,
+          expenses: mergedExpenses,
+          tournamentItems: mergedTournaments,
+          campItems: mergedCamps,
+          otherItems: mergedOthers,
+        }
+      }
       showToast('月次経費を保存しました')
     },
-    [yearMonth, showToast, checkAuthError]
+    [
+      yearMonth,
+      expenses,
+      tournamentItems,
+      campItems,
+      otherItems,
+      showToast,
+      checkAuthError,
+    ]
   )
 
   const value = {

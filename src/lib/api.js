@@ -252,6 +252,30 @@ export async function saveExpenses(yearMonth, payload) {
   })
 }
 
+// タブを閉じる／リロードするなど、通常の fetch が完走を保証されない
+// タイミングでのベストエフォート自動保存用（応答は待たない・エラーも検知しない）。
+// sendBeacon は文字列を渡すと Content-Type: text/plain になるため、
+// GAS 側の JSON.parse(e.postData.contents) にそのまま乗る。
+export function saveMealLogsBeacon(yearMonth, logs, guests, date, dorm) {
+  if (USE_DUMMY) return false
+  if (typeof navigator === 'undefined' || !navigator.sendBeacon) return false
+  const token = getStoredToken()
+  const body = JSON.stringify({
+    action: 'saveMealLogs',
+    token,
+    year_month: yearMonth,
+    date,
+    dorm,
+    logs,
+    guests: guests || [],
+  })
+  try {
+    return navigator.sendBeacon(API_URL, body)
+  } catch (e) {
+    return false
+  }
+}
+
 // -------------------------------------------------------------
 // helpers
 // -------------------------------------------------------------

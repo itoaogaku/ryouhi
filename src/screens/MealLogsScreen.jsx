@@ -16,6 +16,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
+import * as api from '../lib/api.js'
 import {
   RANKS,
   GROUPS,
@@ -57,6 +58,7 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
   const {
     year,
     month,
+    yearMonth,
     members,
     mealLogs,
     guestMeals,
@@ -100,8 +102,57 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
     if (day > totalDays) setDay(totalDays)
   }, [totalDays, day])
 
+  // 直前に表示していた「日付×寮」を記録しておく（日付セレクタでの
+  // 切り替えだけでなく、ヘッダーの年月変更でも dateStr は変わるため、
+  // どちらの場合も下の effect で一括して検知する）
+  const prevKeyRef = useRef(null)
+
   // mealLogs / guestMeals から当日×この寮の状態を初期化
+  // （切り替え前に未保存の変更があれば、保存を忘れて消えないよう自動保存する）
   useEffect(() => {
+    const prevKey = prevKeyRef.current
+    const isSwitch =
+      prevKey && (prevKey.dateStr !== dateStr || prevKey.dorm !== dorm)
+
+    if (isSwitch && dirty) {
+      const oldLogs = members
+        .filter((m) => m.active)
+        .map((m) => {
+          const v = draft[String(m.id)] || { breakfast: false, dinner: false }
+          return {
+            date: prevKey.dateStr,
+            member_id: m.id,
+            dorm: prevKey.dorm,
+            breakfast: !!v.breakfast,
+            dinner: !!v.dinner,
+          }
+        })
+      const oldGuests = guestDraft
+        .filter(
+          (g) => (g.name || '').trim() !== '' || (g.school || '').trim() !== ''
+        )
+        .map((g) => ({
+          date: prevKey.dateStr,
+          dorm: prevKey.dorm,
+          category: g.category || '見学高校生',
+          school: (g.school || '').trim(),
+          name: (g.name || '').trim(),
+          breakfast: !!g.breakfast,
+          dinner: !!g.dinner,
+        }))
+      saveMealLogs(oldLogs, oldGuests, prevKey.dateStr, prevKey.dorm, {
+        silent: true,
+      })
+        .then(() => showToast(`${prevKey.dateStr} の入力を自動保存しました`))
+        .catch((e) => {
+          console.error(e)
+          showToast(
+            `${prevKey.dateStr} の自動保存に失敗しました。入力内容をご確認ください`,
+            'error'
+          )
+        })
+    }
+
     const map = {}
     for (const log of mealLogs) {
       if (log.date === dateStr && (log.dorm || '') === dorm) {
@@ -125,6 +176,7 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
         }))
     )
     setDirty(false)
+    prevKeyRef.current = { dateStr, dorm }
   }, [mealLogs, guestMeals, dateStr, dorm])
 
   const activeMembers = useMemo(
@@ -309,40 +361,89 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
     setDirty(true)
   }
 
+  // 現在の編集内容（当日×この寮）を保存用のペイロードに組み立てる
+  // 手動保存・自動保存（日付切替／画面離脱）のいずれからも使う共通ロジック
+  const buildSavePayload = () => {
+    // 全在籍メンバー分を当日×この寮として UPSERT（未チェックは削除扱い）
+    const logs = activeMembers.map((m) => {
+      const v = getVal(m.id)
+      return {
+        date: dateStr,
+        member_id: m.id,
+        dorm,
+        breakfast: !!v.breakfast,
+        dinner: !!v.dinner,
+      }
+    })
+    // 寮生以外（学校名または氏名ありのみ保存）
+    const guests = guestDraft
+      .filter(
+        (g) => (g.name || '').trim() !== '' || (g.school || '').trim() !== ''
+      )
+      .map((g) => ({
+        date: dateStr,
+        dorm,
+        category: g.category || '見学高校生',
+        school: (g.school || '').trim(),
+        name: (g.name || '').trim(),
+        breakfast: !!g.breakfast,
+        dinner: !!g.dinner,
+      }))
+    return { logs, guests }
+  }
+
   const handleSave = async () => {
     setSaving(true)
     try {
-      // 全在籍メンバー分を当日×この寮として UPSERT（未チェックは削除扱い）
-      const logs = activeMembers.map((m) => {
-        const v = getVal(m.id)
-        return {
-          date: dateStr,
-          member_id: m.id,
-          dorm,
-          breakfast: !!v.breakfast,
-          dinner: !!v.dinner,
-        }
-      })
-      // 寮生以外（学校名または氏名ありのみ保存）
-      const guests = guestDraft
-        .filter(
-          (g) => (g.name || '').trim() !== '' || (g.school || '').trim() !== ''
-        )
-        .map((g) => ({
-          date: dateStr,
-          dorm,
-          category: g.category || '見学高校生',
-          school: (g.school || '').trim(),
-          name: (g.name || '').trim(),
-          breakfast: !!g.breakfast,
-          dinner: !!g.dinner,
-        }))
+      const { logs, guests } = buildSavePayload()
       await saveMealLogs(logs, guests, dateStr, dorm)
       setDirty(false)
     } finally {
       setSaving(false)
     }
   }
+
+  // 常に最新の状態を参照するための ref（unmount / beforeunload の
+  // クリーンアップはマウント時点のクロージャのままになるため）
+  const autoSaveRef = useRef(null)
+  autoSaveRef.current = {
+    dirty,
+    dateStr,
+    dorm,
+    yearMonth,
+    buildSavePayload,
+    saveMealLogs,
+  }
+
+  // 画面タブの切り替え（他の画面や別寮タブへ移動）でこの画面がアンマウント
+  // されるときに、未保存の変更があれば自動保存する
+  useEffect(() => {
+    return () => {
+      const s = autoSaveRef.current
+      if (!s || !s.dirty) return
+      const { logs, guests } = s.buildSavePayload()
+      s.saveMealLogs(logs, guests, s.dateStr, s.dorm, { silent: true }).catch(
+        (e) => console.error('画面離脱時の自動保存に失敗しました', e)
+      )
+    }
+  }, [])
+
+  // ブラウザタブを閉じる／リロードするときは、通常の非同期保存が完走する
+  // 保証がないため sendBeacon でベストエフォート保存する
+  useEffect(() => {
+    const handleUnload = () => {
+      const s = autoSaveRef.current
+      if (!s || !s.dirty) return
+      const { logs, guests } = s.buildSavePayload()
+      api.saveMealLogsBeacon(s.yearMonth, logs, guests, s.dateStr, s.dorm)
+    }
+    window.addEventListener('pagehide', handleUnload)
+    window.addEventListener('beforeunload', handleUnload)
+    return () => {
+      window.removeEventListener('pagehide', handleUnload)
+      window.removeEventListener('beforeunload', handleUnload)
+    }
+  }, [])
 
   // 当日の集計
   const counts = filtered.reduce(
