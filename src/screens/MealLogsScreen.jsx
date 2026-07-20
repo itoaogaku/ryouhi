@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import {
   Save,
   Coffee,
@@ -12,6 +12,8 @@ import {
   CalendarDays,
   Table2,
   Wand2,
+  Printer,
+  Loader2,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import {
@@ -42,14 +44,25 @@ import {
   cn,
 } from '../lib/utils.js'
 import MonthlyMealMatrix from '../components/MonthlyMealMatrix.jsx'
+import MealListSheet from '../components/MealListSheet.jsx'
+import { buildMonthlyMealMatrix } from '../lib/mealMatrix.js'
+import { generateMealListPdf } from '../lib/pdf.js'
 
 // 画面B：日別・月別 食数管理（寮ごと）
 // dorm: '1寮' | '2寮' — その寮の食数を管理
 // guestCategories: この寮で記録を許可する「寮生以外」の種別
 //   （2寮には高校生が泊まらないため見学高校生は対象外にできる）
 export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIES }) {
-  const { year, month, members, mealLogs, guestMeals, loading, saveMealLogs } =
-    useApp()
+  const {
+    year,
+    month,
+    members,
+    mealLogs,
+    guestMeals,
+    loading,
+    saveMealLogs,
+    showToast,
+  } = useApp()
 
   const today = new Date()
   const defaultDay =
@@ -67,6 +80,8 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
   const [dirty, setDirty] = useState(false)
   const [showScheduleConfirm, setShowScheduleConfirm] = useState(false)
   const [applyingSchedule, setApplyingSchedule] = useState(false)
+  const [generatingList, setGeneratingList] = useState(false)
+  const mealListRef = useRef(null)
 
   // member_id -> { breakfast, dinner } の編集バッファ（当日×この寮）
   const [draft, setDraft] = useState({})
@@ -170,6 +185,44 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
       setShowScheduleConfirm(false)
     } finally {
       setApplyingSchedule(false)
+    }
+  }
+
+  // 食堂掲示用PDFの元データ（表示中の絞り込みに関係なく、この寮の対象者全員）
+  const printMatrix = useMemo(
+    () =>
+      buildMonthlyMealMatrix({
+        members,
+        mealLogs,
+        dorm,
+        year,
+        month,
+        filterGroup: 'all',
+        filterRank: 'all',
+      }),
+    [members, mealLogs, dorm, year, month]
+  )
+
+  const handleDownloadMealListPdf = async () => {
+    setGeneratingList(true)
+    try {
+      await new Promise((r) => setTimeout(r, 50))
+      const container = mealListRef.current
+      const pages = Array.from(container.querySelectorAll('[data-pdf-page]'))
+      if (pages.length === 0) {
+        showToast('出力対象のデータがありません', 'error')
+        return
+      }
+      await generateMealListPdf(
+        pages,
+        `${dorm}_食数一覧表_${formatYearMonthJa(year, month)}.pdf`
+      )
+      showToast('食堂掲示用PDFをダウンロードしました')
+    } catch (e) {
+      console.error(e)
+      showToast('PDF生成に失敗しました', 'error')
+    } finally {
+      setGeneratingList(false)
     }
   }
 
@@ -354,10 +407,24 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
             月間一覧表（名前×日付）
           </button>
         </div>
-        <Button variant="secondary" onClick={() => setShowScheduleConfirm(true)}>
-          <Wand2 className="h-4 w-4" />
-          標準スケジュールを一括反映
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="secondary"
+            onClick={handleDownloadMealListPdf}
+            disabled={generatingList}
+          >
+            {generatingList ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Printer className="h-4 w-4" />
+            )}
+            {generatingList ? '生成中...' : '食堂掲示用PDF出力'}
+          </Button>
+          <Button variant="secondary" onClick={() => setShowScheduleConfirm(true)}>
+            <Wand2 className="h-4 w-4" />
+            標準スケジュールを一括反映
+          </Button>
+        </div>
       </div>
 
       {showScheduleConfirm && (
@@ -737,6 +804,17 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
       </p>
         </>
       )}
+
+      {/* PDF描画用オフスクリーン要素（食堂掲示用 月間食数一覧） */}
+      <div className="pdf-offscreen" ref={mealListRef} aria-hidden>
+        <MealListSheet
+          dorm={dorm}
+          year={year}
+          month={month}
+          days={printMatrix.days}
+          rows={printMatrix.rows}
+        />
+      </div>
     </div>
   )
 }

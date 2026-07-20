@@ -53,3 +53,8 @@ export async function generateGroupPdf(pageElements, fileName) {
 export async function generateSummaryPdf(pageElements, fileName) {
   return generatePdf(pageElements, fileName, { orientation: 'landscape' })
 }
+
+// 食堂掲示用 月間食数一覧PDF（A4横）
+export async function generateMealListPdf(pageElements, fileName) {
+  return generatePdf(pageElements, fileName, { orientation: 'landscape' })
+}
