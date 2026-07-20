@@ -9,6 +9,8 @@ import {
   Trash2,
   GraduationCap,
   Home,
+  CalendarDays,
+  Table2,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { RANKS, GROUPS, GUEST_CATEGORIES } from '../lib/constants.js'
@@ -30,6 +32,7 @@ import {
   uid,
   cn,
 } from '../lib/utils.js'
+import MonthlyMealMatrix from '../components/MonthlyMealMatrix.jsx'
 
 // 画面B：日別・月別 食数管理（寮ごと）
 // dorm: '1寮' | '2寮' — その寮の食数を管理
@@ -49,6 +52,8 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
   const [filterRank, setFilterRank] = useState('all')
   // 表示範囲: 'home' = この寮の所属＋喫食者 / 'all' = 全寮生
   const [scope, setScope] = useState('home')
+  // 表示モード: 'daily' = 日別入力 / 'monthly' = 月間一覧表（名前×日付）
+  const [viewMode, setViewMode] = useState('daily')
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
 
@@ -250,6 +255,74 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
         </span>
       </div>
 
+      {/* 表示モード切替 */}
+      <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1">
+        <button
+          onClick={() => setViewMode('daily')}
+          className={cn(
+            'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+            viewMode === 'daily'
+              ? 'bg-primary text-white'
+              : 'text-slate-500 hover:text-slate-800'
+          )}
+        >
+          <CalendarDays className="h-4 w-4" />
+          日別入力
+        </button>
+        <button
+          onClick={() => setViewMode('monthly')}
+          className={cn(
+            'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+            viewMode === 'monthly'
+              ? 'bg-primary text-white'
+              : 'text-slate-500 hover:text-slate-800'
+          )}
+        >
+          <Table2 className="h-4 w-4" />
+          月間一覧表（名前×日付）
+        </button>
+      </div>
+
+      {viewMode === 'monthly' ? (
+        <>
+          <div className="flex flex-wrap items-center gap-3">
+            <Select
+              value={filterGroup}
+              onChange={(e) => setFilterGroup(e.target.value)}
+              className="w-36"
+            >
+              <option value="all">全グループ</option>
+              {GROUPS.map((g) => (
+                <option key={g} value={g}>
+                  {g}
+                </option>
+              ))}
+            </Select>
+            <Select
+              value={filterRank}
+              onChange={(e) => setFilterRank(e.target.value)}
+              className="w-36"
+            >
+              <option value="all">全ランク</option>
+              {RANKS.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <MonthlyMealMatrix
+            dorm={dorm}
+            year={year}
+            month={month}
+            members={members}
+            mealLogs={mealLogs}
+            filterGroup={filterGroup}
+            filterRank={filterRank}
+          />
+        </>
+      ) : (
+        <>
       {/* 日付選択 & 集計 */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-wrap items-end gap-3">
@@ -533,6 +606,8 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
         ※チェックの有無を当日の食数として一括保存します（メンバー: UPSERT
         {guestCategories.length > 0 && '、寮生以外: 当日分を入れ替え'}）。上部の「一括保存」ボタンで保存されます。
       </p>
+        </>
+      )}
     </div>
   )
 }
