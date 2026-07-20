@@ -213,6 +213,11 @@ function Page({ dorm, year, month, days, rows, pageIndex, pageCount }) {
                     （寮間移動）
                   </span>
                 )}
+                {r.isGuest && (
+                  <span style={{ fontSize: 8, fontWeight: 400, color: '#4338ca', marginLeft: 4 }}>
+                    （{r.category}）
+                  </span>
+                )}
               </td>
               {r.cells.map((c) => (
                 <td

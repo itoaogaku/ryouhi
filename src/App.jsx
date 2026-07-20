@@ -5,7 +5,6 @@ import {
   Receipt,
   FileSpreadsheet,
   Building2,
-  ChefHat,
   ShieldCheck,
   LogOut,
   Loader2,
@@ -24,7 +23,6 @@ import MembersScreen from './screens/MembersScreen.jsx'
 import MealLogsScreen from './screens/MealLogsScreen.jsx'
 import ExpensesScreen from './screens/ExpensesScreen.jsx'
 import SettlementScreen from './screens/SettlementScreen.jsx'
-import KitchenSummaryScreen from './screens/KitchenSummaryScreen.jsx'
 import AccountsScreen from './screens/AccountsScreen.jsx'
 
 const TABS = [
@@ -42,12 +40,6 @@ const TABS = [
     icon: CalendarCheck,
     Component: MealLogsScreen,
     props: { dorm: '2寮', guestCategories: GUEST_CATEGORIES_BY_DORM['2寮'] },
-  },
-  {
-    id: 'kitchen',
-    label: '調理人向け集計',
-    icon: ChefHat,
-    Component: KitchenSummaryScreen,
   },
   { id: 'expenses', label: '月次経費', icon: Receipt, Component: ExpensesScreen },
   { id: 'settlement', label: '清算・PDF出力', icon: FileSpreadsheet, Component: SettlementScreen },

@@ -12,7 +12,7 @@ import {
   Users,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
-import { GROUPS, CAMP_PRICE_PRESETS } from '../lib/constants.js'
+import { GROUPS, GRADES, CAMP_PRICE_PRESETS } from '../lib/constants.js'
 import {
   Button,
   Card,
@@ -689,13 +689,27 @@ function BulkAddDialog({
   const isOther = type === 'other'
   const [name, setName] = useState('')
   const [fee, setFee] = useState(0) // 大会:参加費 / 合宿:1泊単価 / その他:金額
-  const [subsidy, setSubsidy] = useState(0) // 大会のみ
   const [nights, setNights] = useState(0) // 合宿のみ
   const [selected, setSelected] = useState(
     () => new Set(members.map((m) => m.id))
   )
 
-  const feeIsPreset = CAMP_PRICE_PRESETS.some((p) => p.value === num(fee))
+  // 大会の補助: 半額補助／全額補助／その他（金額を直接入力）から選ぶ
+  const [subsidyMode, setSubsidyMode] = useState('half') // 'half' | 'full' | 'custom'
+  const [customSubsidy, setCustomSubsidy] = useState(0)
+  const computedSubsidy =
+    subsidyMode === 'half'
+      ? Math.round(num(fee) / 2)
+      : subsidyMode === 'full'
+      ? num(fee)
+      : num(customSubsidy)
+
+  // 合宿の1泊単価: プリセット選択中は選択値を保持し、「カスタム」選択時のみ
+  // 入力欄を表示する（fee の数値だけで判定すると 0円 プリセットと衝突するため
+  // 選択モードを別ステートで管理する）
+  const [campFeeMode, setCampFeeMode] = useState(() =>
+    CAMP_PRICE_PRESETS.some((p) => p.value === fee) ? String(fee) : 'custom'
+  )
 
   const toggle = (id) => {
     setSelected((prev) => {
@@ -707,8 +721,8 @@ function BulkAddDialog({
   }
   const selectAll = () => setSelected(new Set(members.map((m) => m.id)))
   const clearAll = () => setSelected(new Set())
-  const toggleGroup = (group) => {
-    const ids = members.filter((m) => m.group === group).map((m) => m.id)
+  const toggleGrade = (grade) => {
+    const ids = members.filter((m) => m.grade === grade).map((m) => m.id)
     const allOn = ids.every((id) => selected.has(id))
     setSelected((prev) => {
       const next = new Set(prev)
@@ -721,7 +735,7 @@ function BulkAddDialog({
   }
 
   const preview = isTournament
-    ? Math.max(0, num(fee) - num(subsidy))
+    ? Math.max(0, num(fee) - computedSubsidy)
     : isCamp
     ? num(fee) * num(nights)
     : num(fee)
@@ -733,7 +747,7 @@ function BulkAddDialog({
     const ids = Array.from(selected)
     if (isTournament) {
       onApplyTournament(
-        { name: name.trim(), fee: num(fee), subsidy: num(subsidy) },
+        { name: name.trim(), fee: num(fee), subsidy: computedSubsidy },
         ids
       )
     } else if (isCamp) {
@@ -746,10 +760,11 @@ function BulkAddDialog({
     }
   }
 
-  const membersByGroup = GROUPS.map((group) => ({
-    group,
+  // 参加者選択は学年順にグルーピングする（学年ごとに読み仮名順で表示）
+  const membersByGrade = GRADES.map((grade) => ({
+    grade,
     list: members
-      .filter((m) => m.group === group)
+      .filter((m) => m.grade === grade)
       .slice()
       .sort(compareMembersByGradeKana),
   })).filter((g) => g.list.length > 0)
@@ -835,14 +850,28 @@ function BulkAddDialog({
                   <label className="mb-1 block text-xs font-medium text-slate-500">
                     補助
                   </label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={subsidy === 0 ? '' : subsidy}
-                    placeholder="0"
-                    onChange={(e) => setSubsidy(num(e.target.value))}
-                    className="text-right tabular-nums"
-                  />
+                  <Select
+                    value={subsidyMode}
+                    onChange={(e) => setSubsidyMode(e.target.value)}
+                  >
+                    <option value="half">半額補助</option>
+                    <option value="full">全額補助</option>
+                    <option value="custom">その他</option>
+                  </Select>
+                  {subsidyMode === 'custom' ? (
+                    <Input
+                      type="number"
+                      min={0}
+                      value={customSubsidy === 0 ? '' : customSubsidy}
+                      placeholder="0"
+                      onChange={(e) => setCustomSubsidy(num(e.target.value))}
+                      className="mt-1 text-right tabular-nums"
+                    />
+                  ) : (
+                    <div className="mt-1 rounded-md border border-slate-200 bg-slate-100 px-2 py-1.5 text-right text-sm tabular-nums text-slate-500">
+                      {formatYen(computedSubsidy)}
+                    </div>
+                  )}
                 </div>
               </>
             ) : isCamp ? (
@@ -852,10 +881,11 @@ function BulkAddDialog({
                     1泊単価
                   </label>
                   <Select
-                    value={feeIsPreset ? num(fee) : 'custom'}
+                    value={campFeeMode}
                     onChange={(e) => {
                       const v = e.target.value
-                      setFee(v === 'custom' ? 0 : Number(v))
+                      setCampFeeMode(v)
+                      if (v !== 'custom') setFee(Number(v))
                     }}
                   >
                     {CAMP_PRICE_PRESETS.map((p) => (
@@ -864,7 +894,7 @@ function BulkAddDialog({
                       </option>
                     ))}
                   </Select>
-                  {!feeIsPreset && (
+                  {campFeeMode === 'custom' && (
                     <Input
                       type="number"
                       min={0}
@@ -922,16 +952,16 @@ function BulkAddDialog({
               参加者を選択
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
-              {GROUPS.map((g) => {
+              {GRADES.map((g) => {
                 const ids = members
-                  .filter((m) => m.group === g)
+                  .filter((m) => m.grade === g)
                   .map((m) => m.id)
                 const allOn =
                   ids.length > 0 && ids.every((id) => selected.has(id))
                 return (
                   <button
                     key={g}
-                    onClick={() => toggleGroup(g)}
+                    onClick={() => toggleGrade(g)}
                     className={cn(
                       'rounded-full border px-2.5 py-1 text-xs font-medium transition-colors',
                       allOn
@@ -954,10 +984,10 @@ function BulkAddDialog({
           </div>
 
           <div className="max-h-72 space-y-3 overflow-y-auto rounded-lg border border-slate-200 p-3">
-            {membersByGroup.map(({ group, list }) => (
-              <div key={group}>
+            {membersByGrade.map(({ grade, list }) => (
+              <div key={grade}>
                 <div className="mb-1 text-xs font-semibold text-slate-400">
-                  {group}
+                  {grade}
                 </div>
                 <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
                   {list.map((m) => {

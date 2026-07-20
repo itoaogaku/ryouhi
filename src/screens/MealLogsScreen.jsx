@@ -249,13 +249,14 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
       buildMonthlyMealMatrix({
         members,
         mealLogs,
+        guestMeals,
         dorm,
         year,
         month,
         filterGroup: 'all',
         filterRank: 'all',
       }),
-    [members, mealLogs, dorm, year, month]
+    [members, mealLogs, guestMeals, dorm, year, month]
   )
 
   const handleDownloadMealListPdf = async () => {
@@ -622,6 +623,7 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
             month={month}
             members={members}
             mealLogs={mealLogs}
+            guestMeals={guestMeals}
             filterGroup={filterGroup}
             filterRank={filterRank}
           />

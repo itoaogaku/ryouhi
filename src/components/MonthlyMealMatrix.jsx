@@ -12,6 +12,7 @@ export default function MonthlyMealMatrix({
   month,
   members,
   mealLogs,
+  guestMeals = [],
   filterGroup,
   filterRank,
 }) {
@@ -20,13 +21,14 @@ export default function MonthlyMealMatrix({
       buildMonthlyMealMatrix({
         members,
         mealLogs,
+        guestMeals,
         dorm,
         year,
         month,
         filterGroup,
         filterRank,
       }),
-    [members, mealLogs, dorm, year, month, filterGroup, filterRank]
+    [members, mealLogs, guestMeals, dorm, year, month, filterGroup, filterRank]
   )
 
   const { days, rows, columnTotals, grandBreakfast, grandDinner } = matrix
@@ -86,19 +88,34 @@ export default function MonthlyMealMatrix({
                     key={row.memberId}
                     className={cn(
                       'hover:bg-slate-50/60',
-                      row.isCrossDorm ? 'bg-amber-50/40' : idx % 2 === 1 && 'bg-slate-50/30'
+                      row.isCrossDorm
+                        ? 'bg-amber-50/40'
+                        : row.isGuest
+                        ? 'bg-indigo-50/40'
+                        : idx % 2 === 1 && 'bg-slate-50/30'
                     )}
                   >
                     <td
                       className={cn(
                         'sticky left-0 z-10 border-r border-slate-200 px-3 py-1.5 font-medium text-slate-800',
-                        row.isCrossDorm ? 'bg-amber-50' : idx % 2 === 1 ? 'bg-slate-50' : 'bg-white'
+                        row.isCrossDorm
+                          ? 'bg-amber-50'
+                          : row.isGuest
+                          ? 'bg-indigo-50'
+                          : idx % 2 === 1
+                          ? 'bg-slate-50'
+                          : 'bg-white'
                       )}
                     >
                       <div className="whitespace-nowrap">{row.name}</div>
                       {row.isCrossDorm && (
                         <div className="text-[10px] font-normal text-amber-600">
                           寮間移動
+                        </div>
+                      )}
+                      {row.isGuest && (
+                        <div className="text-[10px] font-normal text-indigo-600">
+                          {row.category}
                         </div>
                       )}
                     </td>
