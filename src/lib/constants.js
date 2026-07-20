@@ -60,6 +60,18 @@ export const GUEST_CATEGORIES_BY_DORM = {
   '2寮': ['寮外生', '寮管'],
 }
 
+// 標準の食事提供スケジュール（曜日ごと。0=日〜6=土）
+// 火〜土曜: 朝食・夕食あり／日曜: 朝食のみ／月曜: 提供なし
+export const STANDARD_MEAL_SCHEDULE = {
+  0: { breakfast: true, dinner: false }, // 日
+  1: { breakfast: false, dinner: false }, // 月
+  2: { breakfast: true, dinner: true }, // 火
+  3: { breakfast: true, dinner: true }, // 水
+  4: { breakfast: true, dinner: true }, // 木
+  5: { breakfast: true, dinner: true }, // 金
+  6: { breakfast: true, dinner: true }, // 土
+}
+
 // 合宿1泊単価のプリセット
 export const CAMP_PRICE_PRESETS = [
   { label: '2700円', value: 2700 },

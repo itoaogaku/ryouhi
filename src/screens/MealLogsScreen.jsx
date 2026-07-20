@@ -11,9 +11,16 @@ import {
   Home,
   CalendarDays,
   Table2,
+  Wand2,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
-import { RANKS, GROUPS, GUEST_CATEGORIES, mealDormOf } from '../lib/constants.js'
+import {
+  RANKS,
+  GROUPS,
+  GUEST_CATEGORIES,
+  STANDARD_MEAL_SCHEDULE,
+  mealDormOf,
+} from '../lib/constants.js'
 import {
   Button,
   Card,
@@ -23,12 +30,14 @@ import {
   Checkbox,
   Badge,
   Skeleton,
+  Modal,
 } from '../components/ui/index.jsx'
 import {
   daysInMonth,
   toDateStr,
   weekdayOf,
   WEEKDAY_JA,
+  formatYearMonthJa,
   uid,
   cn,
 } from '../lib/utils.js'
@@ -56,6 +65,8 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
   const [viewMode, setViewMode] = useState('daily')
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
+  const [showScheduleConfirm, setShowScheduleConfirm] = useState(false)
+  const [applyingSchedule, setApplyingSchedule] = useState(false)
 
   // member_id -> { breakfast, dinner } の編集バッファ（当日×この寮）
   const [draft, setDraft] = useState({})
@@ -102,6 +113,40 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
     () => members.filter((m) => m.active),
     [members]
   )
+
+  // 標準スケジュール一括反映の対象（この寮で食事をする人。表示中の絞り込みを反映）
+  const schedulePopulation = useMemo(() => {
+    let pop = activeMembers.filter((m) => mealDormOf(m) === dorm)
+    if (filterGroup !== 'all') pop = pop.filter((m) => m.group === filterGroup)
+    if (filterRank !== 'all') pop = pop.filter((m) => m.rank === filterRank)
+    return pop
+  }, [activeMembers, dorm, filterGroup, filterRank])
+
+  // 火〜土曜=朝夕、日曜=朝のみ、月曜=提供なし の標準スケジュールを
+  // 当月の全日程に一括反映する（guests には触れない）
+  const applyStandardSchedule = async () => {
+    setApplyingSchedule(true)
+    try {
+      const logs = []
+      for (const m of schedulePopulation) {
+        for (let d = 1; d <= totalDays; d++) {
+          const dow = weekdayOf(year, month, d)
+          const sched = STANDARD_MEAL_SCHEDULE[dow]
+          logs.push({
+            date: toDateStr(year, month, d),
+            member_id: m.id,
+            dorm,
+            breakfast: sched.breakfast,
+            dinner: sched.dinner,
+          })
+        }
+      }
+      await saveMealLogs(logs, [], null, dorm)
+      setShowScheduleConfirm(false)
+    } finally {
+      setApplyingSchedule(false)
+    }
+  }
 
   // この寮で当日すでに喫食記録があるメンバー（他寮所属でも表示する）
   const ateHereIds = useMemo(() => {
@@ -256,33 +301,84 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
         </span>
       </div>
 
-      {/* 表示モード切替 */}
-      <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1">
-        <button
-          onClick={() => setViewMode('daily')}
-          className={cn(
-            'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-            viewMode === 'daily'
-              ? 'bg-primary text-white'
-              : 'text-slate-500 hover:text-slate-800'
-          )}
-        >
-          <CalendarDays className="h-4 w-4" />
-          日別入力
-        </button>
-        <button
-          onClick={() => setViewMode('monthly')}
-          className={cn(
-            'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-            viewMode === 'monthly'
-              ? 'bg-primary text-white'
-              : 'text-slate-500 hover:text-slate-800'
-          )}
-        >
-          <Table2 className="h-4 w-4" />
-          月間一覧表（名前×日付）
-        </button>
+      {/* 表示モード切替 & 一括反映 */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1">
+          <button
+            onClick={() => setViewMode('daily')}
+            className={cn(
+              'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+              viewMode === 'daily'
+                ? 'bg-primary text-white'
+                : 'text-slate-500 hover:text-slate-800'
+            )}
+          >
+            <CalendarDays className="h-4 w-4" />
+            日別入力
+          </button>
+          <button
+            onClick={() => setViewMode('monthly')}
+            className={cn(
+              'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+              viewMode === 'monthly'
+                ? 'bg-primary text-white'
+                : 'text-slate-500 hover:text-slate-800'
+            )}
+          >
+            <Table2 className="h-4 w-4" />
+            月間一覧表（名前×日付）
+          </button>
+        </div>
+        <Button variant="secondary" onClick={() => setShowScheduleConfirm(true)}>
+          <Wand2 className="h-4 w-4" />
+          標準スケジュールを一括反映
+        </Button>
       </div>
+
+      {showScheduleConfirm && (
+        <Modal
+          open
+          onClose={() => setShowScheduleConfirm(false)}
+          title="標準スケジュールを一括反映"
+          maxWidth="max-w-md"
+          footer={
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="ghost"
+                onClick={() => setShowScheduleConfirm(false)}
+                disabled={applyingSchedule}
+              >
+                キャンセル
+              </Button>
+              <Button
+                onClick={applyStandardSchedule}
+                disabled={applyingSchedule || schedulePopulation.length === 0}
+              >
+                {applyingSchedule
+                  ? '反映中...'
+                  : `反映する（${schedulePopulation.length}名）`}
+              </Button>
+            </div>
+          }
+        >
+          <div className="space-y-3 text-sm text-slate-600">
+            <p>
+              {formatYearMonthJa(year, month)}の {dorm} について、以下の標準
+              スケジュールを当月の全日程に一括反映します。
+            </p>
+            <ul className="list-disc space-y-1 pl-5">
+              <li>火曜〜土曜：朝食・夕食あり</li>
+              <li>日曜：朝食のみ</li>
+              <li>月曜：提供なし</li>
+            </ul>
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-700">
+              この寮の当月分の食数記録は、既存のチェックも含めてすべてこの
+              スケジュールで上書きされます。個別の欠席や特別対応は、反映後に
+              手動で調整してください。
+            </p>
+          </div>
+        </Modal>
+      )}
 
       {viewMode === 'monthly' ? (
         <>
