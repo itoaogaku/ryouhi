@@ -1,18 +1,22 @@
 // 汎用ユーティリティ
 
-import { GRADES } from './constants.js'
+import { GRADES, isFemaleMember } from './constants.js'
 
 // className を結合する簡易 helper（shadcn の cn 相当）
 export function cn(...classes) {
   return classes.filter(Boolean).join(' ')
 }
 
-// 学年・読み仮名順の比較関数（一覧・PDFの基本の並び順）
-// 学年は GRADES の順番（不明な学年は最後）、同学年内は読み仮名（無ければ氏名）の五十音順
+// 一覧・PDFの基本の並び順: 男子→女子、各グループ内は学年が上（4年）から下（1年）、
+// 同学年内は読み仮名（無ければ氏名）の五十音順
 export function compareMembersByGradeKana(a, b) {
+  const fa = isFemaleMember(a) ? 1 : 0
+  const fb = isFemaleMember(b) ? 1 : 0
+  if (fa !== fb) return fa - fb
   const gi = (m) => {
     const idx = GRADES.indexOf(m?.grade)
-    return idx === -1 ? GRADES.length : idx
+    // 学年が高い方を先に（不明な学年は最後）
+    return idx === -1 ? GRADES.length : GRADES.length - 1 - idx
   }
   const ga = gi(a)
   const gb = gi(b)

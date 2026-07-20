@@ -12,6 +12,12 @@ export const RANKS = [
   'マネージャー',
 ]
 
+// 女子選手を判定するランク（並び順で「男子→女子」を分けるために使用）
+export const FEMALE_RANK = '女子選手'
+export function isFemaleMember(member) {
+  return member?.rank === FEMALE_RANK
+}
+
 // 集金グループ（PDFの改ページ単位もこの順）
 export const GROUPS = ['3階', '2階', '2寮', '女子寮']
 
