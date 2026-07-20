@@ -12,6 +12,7 @@ import { formatYearMonthJa, weekdayOf, WEEKDAY_JA } from '../lib/utils.js'
 const PAGE_W = 1123 // A4横 幅 (96dpi)
 const PAGE_H = 794 // A4横 高さ (96dpi)
 const ROWS_PER_PAGE = 22 // 1ページあたりの人数
+const EAT_COLOR = '#3E8A88' // 「食べる」マークの色
 
 function chunk(arr, size) {
   const out = []
@@ -101,8 +102,8 @@ function Page({ dorm, year, month, days, rows, pageIndex, pageCount }) {
                 display: 'inline-block',
                 width: 12,
                 height: 12,
-                background: '#0f172a',
-                border: '1px solid #0f172a',
+                background: EAT_COLOR,
+                border: `1px solid ${EAT_COLOR}`,
               }}
             />
             食べる
@@ -232,8 +233,10 @@ function Page({ dorm, year, month, days, rows, pageIndex, pageCount }) {
                         display: 'inline-block',
                         width: 13,
                         height: 13,
-                        background: c.breakfast ? '#0f172a' : '#ffffff',
-                        border: '1px solid #64748b',
+                        background: c.breakfast ? EAT_COLOR : '#ffffff',
+                        border: c.breakfast
+                          ? `1px solid ${EAT_COLOR}`
+                          : '1px solid #64748b',
                       }}
                     />
                     <span
@@ -241,8 +244,10 @@ function Page({ dorm, year, month, days, rows, pageIndex, pageCount }) {
                         display: 'inline-block',
                         width: 13,
                         height: 13,
-                        background: c.dinner ? '#0f172a' : '#ffffff',
-                        border: '1px solid #64748b',
+                        background: c.dinner ? EAT_COLOR : '#ffffff',
+                        border: c.dinner
+                          ? `1px solid ${EAT_COLOR}`
+                          : '1px solid #64748b',
                       }}
                     />
                   </div>
