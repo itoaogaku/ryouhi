@@ -315,9 +315,9 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
       const selectedIds = new Set(transferSelected)
       const updatedMembers = members.map((m) => {
         if (!selectedIds.has(m.id)) return m
-        const next = { ...m, dorm }
-        if (GROUP_BY_DORM[dorm]) next.group = GROUP_BY_DORM[dorm]
-        return next
+        // 対応する集金グループが無い寮（1寮）への移動時は、古いグループを
+        // 残さず「未選択」にする（寮生マスターで赤字表示され、選び直しが必要と分かる）
+        return { ...m, dorm, group: GROUP_BY_DORM[dorm] || '' }
       })
       await saveMembers(updatedMembers)
 
@@ -639,7 +639,9 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
             </p>
             {!transferGroupAutoSet && (
               <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                {dorm}への移動では集金グループ（3階・2階）は自動設定されません。移動後に寮生マスターで確認・設定してください。
+                {dorm}には対応する集金グループが無いため、集金グループは「未選択」に
+                リセットされます（寮生マスターに赤字で表示されるので、3階・2階の
+                いずれかを選び直してください）。
               </p>
             )}
             <div>

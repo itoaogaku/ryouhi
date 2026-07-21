@@ -35,16 +35,14 @@ export default function MembersScreen() {
   }
 
   // 所属寮を変更したとき、対応する集金グループが決まっていれば自動で合わせる
-  // （例: 寮を「2寮」にすると集金グループも自動で「2寮」になる）
+  // （例: 寮を「2寮」にすると集金グループも自動で「2寮」になる）。
+  // 対応するグループが無い寮（1寮）に変更した場合は、古いグループを
+  // 残さず「未選択」にして、集金グループの選び直しが必要なことを分かりやすくする
   const updateDorm = (id, value) => {
     setRows((prev) =>
       prev.map((r) => {
         if (r.id !== id) return r
-        const next = { ...r, dorm: value }
-        if (GROUP_BY_DORM[value]) {
-          next.group = GROUP_BY_DORM[value]
-        }
-        return next
+        return { ...r, dorm: value, group: GROUP_BY_DORM[value] || '' }
       })
     )
     setDirty(true)
@@ -232,9 +230,13 @@ export default function MembersScreen() {
                     </td>
                     <td className="px-3 py-2">
                       <Select
-                        value={r.group}
+                        value={r.group || ''}
                         onChange={(e) => update(r.id, 'group', e.target.value)}
+                        className={cn(
+                          !r.group && 'border-destructive text-destructive font-semibold'
+                        )}
                       >
+                        <option value="">未選択</option>
                         {GROUPS.map((g) => (
                           <option key={g} value={g}>
                             {g}
