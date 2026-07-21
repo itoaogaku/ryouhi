@@ -13,8 +13,6 @@ export default function MonthlyMealMatrix({
   members,
   mealLogs,
   guestMeals = [],
-  filterGroup,
-  filterRank,
 }) {
   const matrix = useMemo(
     () =>
@@ -25,10 +23,8 @@ export default function MonthlyMealMatrix({
         dorm,
         year,
         month,
-        filterGroup,
-        filterRank,
       }),
-    [members, mealLogs, guestMeals, dorm, year, month, filterGroup, filterRank]
+    [members, mealLogs, guestMeals, dorm, year, month]
   )
 
   const { days, rows, columnTotals, grandBreakfast, grandDinner } = matrix

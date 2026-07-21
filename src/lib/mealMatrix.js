@@ -15,8 +15,6 @@ export function buildMonthlyMealMatrix({
   dorm,
   year,
   month,
-  filterGroup = 'all',
-  filterRank = 'all',
 }) {
   const totalDays = daysInMonth(year, month)
   const days = Array.from({ length: totalDays }, (_, i) => i + 1)
@@ -31,15 +29,9 @@ export function buildMonthlyMealMatrix({
     eaterIds.add(String(log.member_id))
   }
 
-  let population = activeMembers.filter(
+  const population = activeMembers.filter(
     (m) => mealDormOf(m) === dorm || eaterIds.has(String(m.id))
   )
-  if (filterGroup !== 'all') {
-    population = population.filter((m) => m.group === filterGroup)
-  }
-  if (filterRank !== 'all') {
-    population = population.filter((m) => m.rank === filterRank)
-  }
 
   // member_id -> date -> { breakfast, dinner }
   const lookup = new Map()

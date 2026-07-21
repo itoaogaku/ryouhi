@@ -18,8 +18,6 @@ import {
 import { useApp } from '../context/AppContext.jsx'
 import * as api from '../lib/api.js'
 import {
-  RANKS,
-  GROUPS,
   GUEST_CATEGORIES,
   STANDARD_MEAL_SCHEDULE,
   mealDormOf,
@@ -73,12 +71,6 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
       ? today.getDate()
       : 1
   const [day, setDay] = useState(defaultDay)
-  const [filterGroup, setFilterGroup] = useState('all')
-  const [filterRank, setFilterRank] = useState('all')
-  // 氏名検索（寮間移動で他寮から来た選手を「全寮生」表示からすぐ探すため）
-  const [nameSearch, setNameSearch] = useState('')
-  // 表示範囲: 'home' = この寮の所属＋喫食者 / 'all' = 全寮生
-  const [scope, setScope] = useState('home')
   // 表示モード: 'daily' = 日別入力 / 'monthly' = 月間一覧表（名前×日付）
   const [viewMode, setViewMode] = useState('daily')
   const [saving, setSaving] = useState(false)
@@ -184,13 +176,11 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
     [members]
   )
 
-  // 標準スケジュール一括反映の対象（この寮で食事をする人。表示中の絞り込みを反映）
-  const schedulePopulation = useMemo(() => {
-    let pop = activeMembers.filter((m) => mealDormOf(m) === dorm)
-    if (filterGroup !== 'all') pop = pop.filter((m) => m.group === filterGroup)
-    if (filterRank !== 'all') pop = pop.filter((m) => m.rank === filterRank)
-    return pop
-  }, [activeMembers, dorm, filterGroup, filterRank])
+  // 標準スケジュール一括反映の対象（この寮で食事をする人）
+  const schedulePopulation = useMemo(
+    () => activeMembers.filter((m) => mealDormOf(m) === dorm),
+    [activeMembers, dorm]
+  )
 
   // 既に何らかの記録（朝食・夕食いずれかにチェック）がある「日付×メンバー」の組み合わせ
   const existingLogKeys = useMemo(() => {
@@ -253,8 +243,6 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
         dorm,
         year,
         month,
-        filterGroup: 'all',
-        filterRank: 'all',
       }),
     [members, mealLogs, guestMeals, dorm, year, month]
   )
@@ -297,19 +285,10 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
     return set
   }, [mealLogs, dateStr, dorm])
 
+  // この寮の所属者 + この寮での喫食記録がある人（寮間移動）を表示する
+  // （女子寮所属は1寮で食事をするため、1寮では「所属」として扱う）
   const filtered = activeMembers
-    .filter((m) => {
-      if (filterGroup !== 'all' && m.group !== filterGroup) return false
-      if (filterRank !== 'all' && m.rank !== filterRank) return false
-      if (nameSearch.trim() && !m.name.includes(nameSearch.trim())) return false
-      // 表示範囲: home = この寮で食事をする人 or この寮での喫食者、all = 全寮生
-      // （女子寮所属は1寮で食事をするため、1寮では「所属」として扱う）
-      if (scope === 'home') {
-        const isHome = mealDormOf(m) === dorm
-        if (!isHome && !ateHereIds.has(String(m.id))) return false
-      }
-      return true
-    })
+    .filter((m) => mealDormOf(m) === dorm || ateHereIds.has(String(m.id)))
     .slice()
     .sort(compareMembersByGradeKana)
 
@@ -484,8 +463,7 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
           {dorm} の食数管理
         </span>
         <span className="text-xs text-muted-foreground">
-          （この寮で食べた人を記録。他の寮の選手が寮間移動でここで食べた場合は
-          「全寮生」表示から探して追加できます）
+          （この寮で食べた人を記録します）
         </span>
       </div>
 
@@ -590,44 +568,14 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
       )}
 
       {viewMode === 'monthly' ? (
-        <>
-          <div className="flex flex-wrap items-center gap-3">
-            <Select
-              value={filterGroup}
-              onChange={(e) => setFilterGroup(e.target.value)}
-              className="w-36"
-            >
-              <option value="all">全グループ</option>
-              {GROUPS.map((g) => (
-                <option key={g} value={g}>
-                  {g}
-                </option>
-              ))}
-            </Select>
-            <Select
-              value={filterRank}
-              onChange={(e) => setFilterRank(e.target.value)}
-              className="w-36"
-            >
-              <option value="all">全ランク</option>
-              {RANKS.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <MonthlyMealMatrix
-            dorm={dorm}
-            year={year}
-            month={month}
-            members={members}
-            mealLogs={mealLogs}
-            guestMeals={guestMeals}
-            filterGroup={filterGroup}
-            filterRank={filterRank}
-          />
-        </>
+        <MonthlyMealMatrix
+          dorm={dorm}
+          year={year}
+          month={month}
+          members={members}
+          mealLogs={mealLogs}
+          guestMeals={guestMeals}
+        />
       ) : (
         <>
       {/* 日付選択 & 集計 */}
@@ -663,45 +611,6 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
               </span>
             </div>
           </div>
-          <Select
-            value={filterGroup}
-            onChange={(e) => setFilterGroup(e.target.value)}
-            className="w-36"
-          >
-            <option value="all">全グループ</option>
-            {GROUPS.map((g) => (
-              <option key={g} value={g}>
-                {g}
-              </option>
-            ))}
-          </Select>
-          <Select
-            value={filterRank}
-            onChange={(e) => setFilterRank(e.target.value)}
-            className="w-36"
-          >
-            <option value="all">全ランク</option>
-            {RANKS.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </Select>
-          <Select
-            value={scope}
-            onChange={(e) => setScope(e.target.value)}
-            className="w-44"
-            title="表示範囲"
-          >
-            <option value="home">{dorm}所属＋喫食者</option>
-            <option value="all">全寮生（寮間移動を含む）</option>
-          </Select>
-          <Input
-            value={nameSearch}
-            onChange={(e) => setNameSearch(e.target.value)}
-            placeholder="氏名で検索（寮間移動の選手を探す時に便利）"
-            className="w-64"
-          />
         </div>
 
         <div className="flex items-center gap-2">
