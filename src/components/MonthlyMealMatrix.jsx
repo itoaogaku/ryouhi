@@ -79,6 +79,29 @@ export default function MonthlyMealMatrix({
                 </tr>
               </thead>
               <tbody>
+                {rows.length > 0 && (
+                  <tr className="border-b border-slate-200 bg-slate-100 font-semibold">
+                    <td className="sticky left-0 z-10 border-r border-slate-200 bg-slate-100 px-3 py-1.5 text-slate-700">
+                      日別合計
+                    </td>
+                    {columnTotals.map((c) => (
+                      <td
+                        key={c.day}
+                        className="px-0.5 py-1 text-center"
+                      >
+                        <div className="mx-auto flex w-fit flex-col items-center gap-0.5 text-[9px] leading-tight">
+                          <span className="text-blue-600">{c.breakfast}</span>
+                          <span className="text-emerald-600">{c.dinner}</span>
+                        </div>
+                      </td>
+                    ))}
+                    <td className="sticky right-0 z-10 border-l border-slate-200 bg-slate-100 px-2 py-1.5 text-right">
+                      <span className="text-blue-600">{grandBreakfast}</span>
+                      <span className="text-slate-300">/</span>
+                      <span className="text-emerald-600">{grandDinner}</span>
+                    </td>
+                  </tr>
+                )}
                 {rows.map((row, idx) => (
                   <tr
                     key={row.memberId}
