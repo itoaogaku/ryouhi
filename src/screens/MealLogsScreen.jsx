@@ -20,6 +20,7 @@ import * as api from '../lib/api.js'
 import {
   GUEST_CATEGORIES,
   STANDARD_MEAL_SCHEDULE,
+  MEAL_TRACKING_DORMS,
   mealDormOf,
 } from '../lib/constants.js'
 import {
@@ -270,25 +271,18 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
     }
   }
 
-  // この寮で当日すでに喫食記録があるメンバー（寮間移動で食べた人も表示する）
-  const ateHereIds = useMemo(() => {
-    const set = new Set()
-    for (const log of mealLogs) {
-      if (
-        log.date === dateStr &&
-        (log.dorm || '') === dorm &&
-        (log.breakfast || log.dinner)
-      ) {
-        set.add(String(log.member_id))
-      }
-    }
-    return set
-  }, [mealLogs, dateStr, dorm])
-
-  // この寮の所属者 + この寮での喫食記録がある人（寮間移動）を表示する
+  // この寮の所属者のみを表示する
   // （女子寮所属は1寮で食事をするため、1寮では「所属」として扱う）
   const filtered = activeMembers
-    .filter((m) => mealDormOf(m) === dorm || ateHereIds.has(String(m.id)))
+    .filter((m) => mealDormOf(m) === dorm)
+    .slice()
+    .sort(compareMembersByGradeKana)
+
+  // もう一方の食数管理対象寮（1寮なら2寮、2寮なら1寮）。
+  // 寮間移動でこの寮に来て食べることがあるため、名前を挙げてチェックできるようにする
+  const otherDorm = MEAL_TRACKING_DORMS.find((d) => d !== dorm) || ''
+  const otherDormMembers = activeMembers
+    .filter((m) => mealDormOf(m) === otherDorm)
     .slice()
     .sort(compareMembersByGradeKana)
 
@@ -439,6 +433,15 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
     (acc, g) => {
       if (g.breakfast) acc.breakfast += 1
       if (g.dinner) acc.dinner += 1
+      return acc
+    },
+    { breakfast: 0, dinner: 0 }
+  )
+  const otherDormCounts = otherDormMembers.reduce(
+    (acc, m) => {
+      const v = getVal(m.id)
+      if (v.breakfast) acc.breakfast += 1
+      if (v.dinner) acc.dinner += 1
       return acc
     },
     { breakfast: 0, dinner: 0 }
@@ -664,14 +667,10 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
               <tbody>
                 {filtered.map((m) => {
                   const v = getVal(m.id)
-                  const isCrossDorm = mealDormOf(m) !== dorm
                   return (
                     <tr
                       key={m.id}
-                      className={cn(
-                        'border-b border-slate-100 hover:bg-slate-50/60',
-                        isCrossDorm && 'bg-amber-50/50'
-                      )}
+                      className="border-b border-slate-100 hover:bg-slate-50/60"
                     >
                       <td className="px-4 py-2 tabular-nums text-slate-400">
                         {m.id}
@@ -679,18 +678,8 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
                       <td className="px-4 py-2 font-medium text-slate-800">
                         {m.name}
                       </td>
-                      <td className="px-4 py-2">
-                        <span
-                          className={cn(
-                            'rounded px-1.5 py-0.5 text-xs',
-                            isCrossDorm
-                              ? 'bg-amber-100 text-amber-700'
-                              : 'text-slate-500'
-                          )}
-                        >
-                          {m.dorm || '—'}
-                          {isCrossDorm && '（寮間移動）'}
-                        </span>
+                      <td className="px-4 py-2 text-slate-500">
+                        {m.dorm || '—'}
                       </td>
                       <td className="px-4 py-2 text-slate-500">{m.rank}</td>
                       <td className="px-4 py-2 text-slate-500">{m.group}</td>
@@ -728,6 +717,72 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
           </div>
         </CardContent>
       </Card>
+
+      {/* 寮間移動: もう一方の寮の選手がこの寮で食べた場合はここでチェックする */}
+      {otherDorm && otherDormMembers.length > 0 && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div className="text-sm font-semibold text-slate-700">
+                {otherDorm}生
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge variant="default" className="gap-1">
+                  <Coffee className="h-3.5 w-3.5" /> 朝 {otherDormCounts.breakfast}
+                </Badge>
+                <Badge variant="secondary" className="gap-1">
+                  <UtensilsCrossed className="h-3.5 w-3.5" /> 夕{' '}
+                  {otherDormCounts.dinner}
+                </Badge>
+              </div>
+            </div>
+            <p className="mb-3 text-xs text-slate-400">
+              {otherDorm}所属の選手が寮間移動でこの寮で食事をした場合は、ここにチェックしてください（基本的には空欄のままで構いません）。
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[420px] text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-left text-xs font-medium text-slate-400">
+                    <th className="py-1.5">氏名</th>
+                    <th className="w-28 py-1.5">ランク</th>
+                    <th className="w-20 py-1.5 text-center">朝食</th>
+                    <th className="w-20 py-1.5 text-center">夕食</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {otherDormMembers.map((m) => {
+                    const v = getVal(m.id)
+                    return (
+                      <tr key={m.id} className="border-b border-slate-100">
+                        <td className="py-1.5 font-medium text-slate-800">
+                          {m.name}
+                        </td>
+                        <td className="py-1.5 text-slate-500">{m.rank}</td>
+                        <td className="py-1.5">
+                          <div className="flex justify-center">
+                            <Checkbox
+                              checked={v.breakfast}
+                              onChange={(val) => setVal(m.id, 'breakfast', val)}
+                            />
+                          </div>
+                        </td>
+                        <td className="py-1.5">
+                          <div className="flex justify-center">
+                            <Checkbox
+                              checked={v.dinner}
+                              onChange={(val) => setVal(m.id, 'dinner', val)}
+                            />
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* 寮生以外（見学高校生・寮外生・寮管）の食数 */}
       {guestCategories.length > 0 && (
