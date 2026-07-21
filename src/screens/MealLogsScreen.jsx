@@ -14,6 +14,7 @@ import {
   Wand2,
   Printer,
   Loader2,
+  ArrowRightLeft,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import * as api from '../lib/api.js'
@@ -21,6 +22,7 @@ import {
   GUEST_CATEGORIES,
   STANDARD_MEAL_SCHEDULE,
   MEAL_TRACKING_DORMS,
+  GROUP_BY_DORM,
   mealDormOf,
 } from '../lib/constants.js'
 import {
@@ -63,6 +65,7 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
     guestMeals,
     loading,
     saveMealLogs,
+    saveMembers,
     showToast,
   } = useApp()
 
@@ -79,6 +82,10 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
   const [showScheduleConfirm, setShowScheduleConfirm] = useState(false)
   const [applyingSchedule, setApplyingSchedule] = useState(false)
   const [generatingList, setGeneratingList] = useState(false)
+  const [showTransferDialog, setShowTransferDialog] = useState(false)
+  const [transferring, setTransferring] = useState(false)
+  const [transferDay, setTransferDay] = useState(defaultDay)
+  const [transferSelected, setTransferSelected] = useState(() => new Set())
   const mealListRef = useRef(null)
 
   // member_id -> { breakfast, dinner } の編集バッファ（当日×この寮）
@@ -285,6 +292,64 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
     .filter((m) => mealDormOf(m) === otherDorm)
     .slice()
     .sort(compareMembersByGradeKana)
+
+  // 集金グループを自動設定できるか（1寮には対応する集金グループが無いため、
+  // 1寮への移動時は手動確認が必要になる旨をダイアログで案内する）
+  const transferGroupAutoSet = !!GROUP_BY_DORM[dorm]
+
+  const toggleTransferMember = (id) => {
+    setTransferSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  // 寮間移動を登録: 選んだ選手の寮生マスターをこの寮に切り替え、
+  // 移動日から月末までこの寮の標準スケジュールを未入力の日にだけ一括反映する
+  const applyDormTransfer = async () => {
+    if (transferSelected.size === 0) return
+    setTransferring(true)
+    try {
+      const selectedIds = new Set(transferSelected)
+      const updatedMembers = members.map((m) => {
+        if (!selectedIds.has(m.id)) return m
+        const next = { ...m, dorm }
+        if (GROUP_BY_DORM[dorm]) next.group = GROUP_BY_DORM[dorm]
+        return next
+      })
+      await saveMembers(updatedMembers)
+
+      const transferLogs = []
+      for (const id of selectedIds) {
+        for (let d = transferDay; d <= totalDays; d++) {
+          const date = toDateStr(year, month, d)
+          if (existingLogKeys.has(`${date}__${id}`)) continue
+          const sched = STANDARD_MEAL_SCHEDULE[weekdayOf(year, month, d)]
+          if (!sched.breakfast && !sched.dinner) continue
+          transferLogs.push({
+            date,
+            member_id: id,
+            dorm,
+            breakfast: sched.breakfast,
+            dinner: sched.dinner,
+          })
+        }
+      }
+      if (transferLogs.length > 0) {
+        await saveMealLogs(transferLogs, [], null, dorm, { silent: true })
+      }
+      showToast(`${selectedIds.size}名を${dorm}へ移動登録しました`)
+      setShowTransferDialog(false)
+      setTransferSelected(new Set())
+    } catch (e) {
+      console.error(e)
+      showToast('寮間移動の登録に失敗しました', 'error')
+    } finally {
+      setTransferring(false)
+    }
+  }
 
   const getVal = (id) =>
     draft[String(id)] || { breakfast: false, dinner: false }
@@ -515,8 +580,124 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
             <Wand2 className="h-4 w-4" />
             標準スケジュールを一括反映
           </Button>
+          {otherDorm && (
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setTransferDay(day)
+                setTransferSelected(new Set())
+                setShowTransferDialog(true)
+              }}
+            >
+              <ArrowRightLeft className="h-4 w-4" />
+              寮間移動を登録
+            </Button>
+          )}
         </div>
       </div>
+
+      {showTransferDialog && (
+        <Modal
+          open
+          onClose={() => setShowTransferDialog(false)}
+          title={`寮間移動を登録（${otherDorm} → ${dorm}）`}
+          maxWidth="max-w-lg"
+          footer={
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-sm text-slate-500">
+                <span className="font-semibold text-slate-700">
+                  {transferSelected.size}名
+                </span>{' '}
+                を選択中
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  onClick={() => setShowTransferDialog(false)}
+                  disabled={transferring}
+                >
+                  キャンセル
+                </Button>
+                <Button
+                  onClick={applyDormTransfer}
+                  disabled={transferring || transferSelected.size === 0}
+                >
+                  {transferring
+                    ? '登録中...'
+                    : `${transferSelected.size}名を${dorm}へ移動する`}
+                </Button>
+              </div>
+            </div>
+          }
+        >
+          <div className="space-y-4 text-sm">
+            <p className="text-slate-600">
+              {otherDorm}に所属する選手を選ぶと、寮生マスターの「寮」を{dorm}
+              に切り替え、移動日から月末まで{dorm}の標準スケジュール（火〜土:
+              朝夕、日:朝のみ）を<strong>まだ記録の無い日にだけ</strong>
+              一括反映します。
+            </p>
+            {!transferGroupAutoSet && (
+              <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                {dorm}への移動では集金グループ（3階・2階）は自動設定されません。移動後に寮生マスターで確認・設定してください。
+              </p>
+            )}
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-500">
+                移動日
+              </label>
+              <Select
+                value={transferDay}
+                onChange={(e) => setTransferDay(Number(e.target.value))}
+                className="w-28"
+              >
+                {Array.from({ length: totalDays }, (_, i) => i + 1).map((d) => (
+                  <option key={d} value={d}>
+                    {d}日
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-500">
+                対象の選手（{otherDorm}所属）
+              </label>
+              <div className="max-h-64 space-y-1.5 overflow-y-auto rounded-lg border border-slate-200 p-2">
+                {otherDormMembers.map((m) => {
+                  const on = transferSelected.has(m.id)
+                  return (
+                    <button
+                      key={m.id}
+                      onClick={() => toggleTransferMember(m.id)}
+                      className={cn(
+                        'flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left text-sm transition-colors',
+                        on
+                          ? 'border-primary/30 bg-primary/5'
+                          : 'border-slate-200 bg-white hover:bg-slate-50'
+                      )}
+                    >
+                      <Checkbox checked={on} onChange={() => toggleTransferMember(m.id)} />
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium text-slate-800">
+                          {m.name}
+                        </span>
+                        <span className="block text-[11px] text-slate-400">
+                          {m.grade} ・ {m.rank}
+                        </span>
+                      </span>
+                    </button>
+                  )
+                })}
+                {otherDormMembers.length === 0 && (
+                  <p className="py-4 text-center text-xs text-slate-400">
+                    {otherDorm}に選手がいません
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {showScheduleConfirm && (
         <Modal
