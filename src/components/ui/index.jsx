@@ -86,6 +86,19 @@ export function Input({ className, ...props }) {
   )
 }
 
+// Textarea
+export function Textarea({ className, ...props }) {
+  return (
+    <textarea
+      className={cn(
+        'flex w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
 // Select（ネイティブ）
 export function Select({ className, children, ...props }) {
   return (

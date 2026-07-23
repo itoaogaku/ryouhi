@@ -121,6 +121,26 @@ export function AppProvider({ children, onAuthError }) {
     [showToast, checkAuthError]
   )
 
+  // 規定（食費単価・部費・清算ルールメモ）保存。全年月で共通の設定
+  const saveConfig = useCallback(
+    async (next) => {
+      try {
+        await api.saveConfig(next)
+      } catch (e) {
+        checkAuthError(e)
+        throw e
+      }
+      const merged = { ...DEFAULT_CONFIG, ...next }
+      setConfig(merged)
+      // config は全年月共通のため、キャッシュ済みの全年月へ反映する
+      for (const ym of Object.keys(cacheRef.current)) {
+        cacheRef.current[ym] = { ...cacheRef.current[ym], config: merged }
+      }
+      showToast('規定を保存しました')
+    },
+    [showToast, checkAuthError]
+  )
+
   // logs: メンバー食数（当日×寮）, guests: 見学高校生（当日×寮）, date: 対象日, dorm: 対象寮
   // options.silent: true の場合、成功トーストを出さない（自動保存用）
   // options.toastMessage: 成功トーストの文言を差し替える
@@ -262,6 +282,7 @@ export function AppProvider({ children, onAuthError }) {
     showToast,
     reload,
     saveMembers,
+    saveConfig,
     saveMealLogs,
     saveExpenses,
     usingDummy: api.USE_DUMMY,

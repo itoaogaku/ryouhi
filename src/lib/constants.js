@@ -90,6 +90,7 @@ export const DEFAULT_CONFIG = {
   breakfast_price: 400,
   dinner_price: 600,
   base_club_fee: 3000,
+  notes: '',
 }
 
 // 経費項目のラベル（PDF/一覧の内訳表示用）

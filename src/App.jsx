@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   LogOut,
   Loader2,
+  Settings,
 } from 'lucide-react'
 import { useAuth } from './context/AuthContext.jsx'
 import { AppProvider, useApp } from './context/AppContext.jsx'
@@ -24,6 +25,7 @@ import MealLogsScreen from './screens/MealLogsScreen.jsx'
 import ExpensesScreen from './screens/ExpensesScreen.jsx'
 import SettlementScreen from './screens/SettlementScreen.jsx'
 import AccountsScreen from './screens/AccountsScreen.jsx'
+import SettingsScreen from './screens/SettingsScreen.jsx'
 
 const TABS = [
   { id: 'members', label: '寮生マスター', icon: Users, Component: MembersScreen },
@@ -43,6 +45,7 @@ const TABS = [
   },
   { id: 'expenses', label: '月次経費', icon: Receipt, Component: ExpensesScreen },
   { id: 'settlement', label: '清算・PDF出力', icon: FileSpreadsheet, Component: SettlementScreen },
+  { id: 'settings', label: '規定', icon: Settings, Component: SettingsScreen },
   { id: 'accounts', label: 'アカウント管理', icon: ShieldCheck, Component: AccountsScreen },
 ]
 

@@ -197,6 +197,18 @@ export async function saveMembers(members) {
   return apiPost('saveMembers', { members })
 }
 
+// 規定（食費単価・部費・清算ルールメモ）保存。全年月で共通の設定
+export async function saveConfig(config) {
+  if (USE_DUMMY) {
+    await delay(150)
+    for (const ym of Object.keys(dummyStore.loaded)) {
+      dummyStore.loaded[ym].config = structuredCloneSafe(config)
+    }
+    return { saved: Object.keys(config || {}).length }
+  }
+  return apiPost('saveConfig', { config })
+}
+
 // 食数ログ一括保存（UPSERT: date+member+dorm）+ 見学高校生（当日×寮を総入れ替え）
 export async function saveMealLogs(yearMonth, logs, guests, date, dorm) {
   guests = guests || []

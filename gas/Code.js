@@ -181,6 +181,9 @@ function handleRequest(e, method) {
       case 'saveMembers':
         data = saveMembers(params.members);
         break;
+      case 'saveConfig':
+        data = saveConfig(params.config);
+        break;
       case 'saveMealLogs':
         data = saveMealLogs(
           params.year_month,
@@ -718,6 +721,26 @@ function saveMembers(members) {
   }
   invalidateAllInitialDataCache_();
   return { saved: members.length };
+}
+
+// 規定（食費単価・部費・清算ルールメモ）全置換保存
+// config はキー・バリュー形式なので、任意のキーをそのまま書き込む
+function saveConfig(config) {
+  ensureSheets_();
+  config = config || {};
+  var sheet = getSheet_(SHEETS.config.name);
+  clearBody_(sheet);
+  var rows = [];
+  for (var key in config) {
+    if (!Object.prototype.hasOwnProperty.call(config, key)) continue;
+    rows.push([key, config[key]]);
+  }
+  if (rows.length) {
+    sheet.getRange(2, 1, rows.length, SHEETS.config.headers.length).setValues(rows);
+  }
+  // 規定は全年月の取得結果に含まれるため、キャッシュ済みの全年月を破棄する
+  invalidateAllInitialDataCache_();
+  return { saved: rows.length };
 }
 
 // 食数ログ UPSERT（key: date + member_id + dorm）+ 見学高校生（当日×寮を総入れ替え）
