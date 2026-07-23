@@ -78,6 +78,7 @@ export function emptyExpense(memberId, yearMonth) {
     medical_actual: 0,
     medical_subsidy: 0,
     sagawa_fee: 0,
+    motivation_count: 0,
   }
 }
 

@@ -100,5 +100,9 @@ export const EXPENSE_LABELS = {
   tournament: '大会費',
   camp: '合宿費',
   medical: '治療費',
-  sagawa: '佐川代',
+  motivation: 'モチベーション費補助',
+  sagawa: '配達代',
 }
+
+// モチベーション費の単価（1回あたり）。補助回数 × この単価で補助額を計算する
+export const MOTIVATION_FEE_PER_UNIT = 770

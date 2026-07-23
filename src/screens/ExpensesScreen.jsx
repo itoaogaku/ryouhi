@@ -37,6 +37,7 @@ import {
 } from '../lib/utils.js'
 import {
   medicalNet,
+  motivationSubsidyAmount,
   tournamentItemNet,
   campItemCost,
   otherItemNet,
@@ -86,6 +87,7 @@ export default function ExpensesScreen() {
           medical_actual: num(base.medical_actual),
           medical_subsidy: num(base.medical_subsidy),
           sagawa_fee: num(base.sagawa_fee),
+          motivation_count: num(base.motivation_count),
           tournaments: (tourByMember.get(key) || []).map((t) => ({
             uid: uid(),
             name: t.name || '',
@@ -195,7 +197,7 @@ export default function ExpensesScreen() {
     setDirty(true)
   }
 
-  // ---- その他費用明細操作（佐川代と同じイメージの自由追加項目） ----
+  // ---- その他費用明細操作（配達代と同じイメージの自由追加項目） ----
   const addOther = (id) => {
     setRows((prev) => ({
       ...prev,
@@ -360,6 +362,7 @@ export default function ExpensesScreen() {
           medical_actual: num(r.medical_actual),
           medical_subsidy: num(r.medical_subsidy),
           sagawa_fee: num(r.sagawa_fee),
+          motivation_count: num(r.motivation_count),
         })
         for (const t of r.tournaments) {
           // 完全に空の行は保存しない
@@ -487,10 +490,11 @@ export default function ExpensesScreen() {
                   <th className="px-3 py-2.5 text-left">氏名</th>
                   <th className="px-3 py-2.5 text-right">大会費</th>
                   <th className="px-3 py-2.5 text-right">合宿費</th>
-                  <th className="px-2 py-2.5 text-right">治療実費</th>
-                  <th className="px-2 py-2.5 text-right">治療補助</th>
-                  <th className="px-2 py-2.5 text-right text-primary">治療差額</th>
-                  <th className="px-2 py-2.5 text-right">佐川代</th>
+                  <th className="px-2 py-2.5 text-right">治療費実費</th>
+                  <th className="px-2 py-2.5 text-right">治療費補助</th>
+                  <th className="px-2 py-2.5 text-right">モチベーション費補助</th>
+                  <th className="px-2 py-2.5 text-right text-primary">治療費差額</th>
+                  <th className="px-2 py-2.5 text-right">配達代</th>
                   <th className="px-3 py-2.5 text-right">その他費用</th>
                 </tr>
               </thead>
@@ -574,7 +578,7 @@ export default function ExpensesScreen() {
                             </span>
                           </button>
                         </td>
-                        {/* 治療実費 */}
+                        {/* 治療費実費 */}
                         <td className="px-1 py-1.5">
                           <NumCell
                             value={r.medical_actual}
@@ -583,7 +587,7 @@ export default function ExpensesScreen() {
                             }
                           />
                         </td>
-                        {/* 治療補助 */}
+                        {/* 治療費補助 */}
                         <td className="px-1 py-1.5">
                           <NumCell
                             value={r.medical_subsidy}
@@ -592,7 +596,19 @@ export default function ExpensesScreen() {
                             }
                           />
                         </td>
-                        {/* 治療差額 */}
+                        {/* モチベーション費補助（回数 × 単価770円） */}
+                        <td className="px-1 py-1.5">
+                          <NumCell
+                            value={r.motivation_count}
+                            onChange={(v) =>
+                              updateField(m.id, 'motivation_count', v)
+                            }
+                          />
+                          <div className="mt-0.5 text-center text-[10px] text-slate-400">
+                            {formatYen(motivationSubsidyAmount(r))}
+                          </div>
+                        </td>
+                        {/* 治療費差額 */}
                         <td className="px-2 py-1.5 text-right">
                           <span
                             className={cn(
@@ -605,7 +621,7 @@ export default function ExpensesScreen() {
                             {formatYen(net)}
                           </span>
                         </td>
-                        {/* 佐川代 */}
+                        {/* 配達代 */}
                         <td className="px-1 py-1.5">
                           <NumCell
                             value={r.sagawa_fee}
@@ -631,7 +647,7 @@ export default function ExpensesScreen() {
                       {/* 展開: 大会・合宿・その他費用の明細エディタ */}
                       {isOpen && (
                         <tr className="border-b border-slate-200 bg-slate-50/70">
-                          <td colSpan={9} className="px-4 py-3">
+                          <td colSpan={10} className="px-4 py-3">
                             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
                               <TournamentEditor
                                 items={r.tournaments}
@@ -663,7 +679,7 @@ export default function ExpensesScreen() {
                 {filtered.length === 0 && (
                   <tr>
                     <td
-                      colSpan={9}
+                      colSpan={10}
                       className="px-4 py-10 text-center text-sm text-muted-foreground"
                     >
                       該当するメンバーがいません
@@ -677,7 +693,7 @@ export default function ExpensesScreen() {
       </Card>
 
       <p className="text-xs text-muted-foreground">
-        ※ 行の ▶ を開くと「〇〇大会」「〇〇合宿」に加えて、佐川代と同じ
+        ※ 行の ▶ を開くと「〇〇大会」「〇〇合宿」に加えて、配達代と同じ
         イメージで名前を自由に付けられる「その他費用」も件数無制限で追加できます。
         大会は参加費 − 補助 = 請求額、合宿は 1泊単価 × 泊数 = 費用、
         その他費用も金額 − 補助 = 請求額を自動計算するので、チームが一部
@@ -1329,7 +1345,7 @@ function CampEditor({ items, onAdd, onUpdate, onRemove }) {
   )
 }
 
-// ---- その他費用エディタ（佐川代と同じイメージの自由追加項目） ----
+// ---- その他費用エディタ（配達代と同じイメージの自由追加項目） ----
 function OtherEditor({ items, onAdd, onUpdate, onRemove }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3">

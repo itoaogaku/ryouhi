@@ -13,7 +13,7 @@ import {
   Tag,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
-import { GROUPS, MEAL_TRACKING_DORMS } from '../lib/constants.js'
+import { GROUPS, MEAL_TRACKING_DORMS, MOTIVATION_FEE_PER_UNIT } from '../lib/constants.js'
 import {
   Button,
   Card,
@@ -106,7 +106,7 @@ export default function SettlementScreen() {
     () => buildItemColumns(displayRows),
     [displayRows]
   )
-  const detailColSpan = 10 + dynamicCols.length
+  const detailColSpan = 11 + dynamicCols.length
 
   const grandTotal = sumTotals(rows)
   const avg = rows.length ? Math.round(grandTotal / rows.length) : 0
@@ -266,7 +266,8 @@ export default function SettlementScreen() {
                   ))}
                   <th className="px-3 py-2.5 text-right">治療費</th>
                   <th className="px-3 py-2.5 text-right">治療費補助</th>
-                  <th className="px-3 py-2.5 text-right">佐川</th>
+                  <th className="px-3 py-2.5 text-right">モチベーション費補助</th>
+                  <th className="px-3 py-2.5 text-right">配達代</th>
                   <th className="px-3 py-2.5 text-right font-semibold text-slate-700">
                     合計請求額
                   </th>
@@ -343,6 +344,14 @@ export default function SettlementScreen() {
                             ? `−${formatYen(r.medicalSubsidy)}`
                             : '—'}
                         </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-red-600">
+                          {r.motivation > 0 ? `−${formatYen(r.motivation)}` : '—'}
+                          {r.motivationCount > 0 && (
+                            <span className="ml-1 text-[11px] text-slate-400">
+                              ({r.motivationCount}回)
+                            </span>
+                          )}
+                        </td>
                         <td className="px-3 py-2 text-right tabular-nums text-slate-600">
                           {r.sagawa ? formatYen(r.sagawa) : '—'}
                         </td>
@@ -378,7 +387,9 @@ export default function SettlementScreen() {
 
       <p className="text-xs text-muted-foreground">
         合計請求額 = 部費 + 大会費(各: 参加費−補助) + 合宿費(各: 単価×泊数) +
-        (治療費実費−補助金) + 佐川代 + その他費用(各項目の合計) +
+        (治療費実費−補助金) − モチベーション費補助(回数×
+        {formatYen(MOTIVATION_FEE_PER_UNIT)}) + 配達代 +
+        その他費用(各項目の合計) +
         食費(実際に食べた寮ごとに 朝食数×朝食単価 + 夕食数×夕食単価。
         {MEAL_TRACKING_DORMS.map((dorm, i) => (
           <span key={dorm}>

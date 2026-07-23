@@ -29,7 +29,7 @@ export default function CollectionSheet({ group, rows, year, month, config }) {
   }
 
   // 列が多い月でも収まるよう、内容量に応じて自動幅にする
-  const totalCols = 5 + dynamicCols.length + 3 // No/氏名/ランク/部費/食費 + 動的列 + 治療費/治療費補助/佐川 + 合計/領収(概算)
+  const totalCols = 5 + dynamicCols.length + 4 // No/氏名/ランク/部費/食費 + 動的列 + 治療費/治療費補助/モチベーション費補助/配達代 + 合計/領収(概算)
 
   return (
     <div
@@ -107,7 +107,8 @@ export default function CollectionSheet({ group, rows, year, month, config }) {
             ))}
             <Th align="right">治療費</Th>
             <Th align="right">治療費補助</Th>
-            <Th align="right">佐川</Th>
+            <Th align="right">モチベーション費補助</Th>
+            <Th align="right">配達代</Th>
             <Th align="right">合計</Th>
             <Th align="center">領収</Th>
           </tr>
@@ -137,6 +138,9 @@ export default function CollectionSheet({ group, rows, year, month, config }) {
               <Td align="right" danger={r.medicalSubsidy > 0}>
                 {r.medicalSubsidy > 0 ? `-${formatYen(r.medicalSubsidy)}` : '—'}
               </Td>
+              <Td align="right" danger={r.motivation > 0}>
+                {r.motivation > 0 ? `-${formatYen(r.motivation)}` : '—'}
+              </Td>
               <Td align="right">{r.sagawa ? formatYen(r.sagawa) : '—'}</Td>
               <Td align="right" bold accent>{formatYen(r.total)}</Td>
               <Td align="center">
@@ -155,7 +159,7 @@ export default function CollectionSheet({ group, rows, year, month, config }) {
         </tbody>
         <tfoot>
           <tr style={{ background: '#dbeafe' }}>
-            <Td align="right" bold colSpan={4 + dynamicCols.length + 3}>
+            <Td align="right" bold colSpan={4 + dynamicCols.length + 4}>
               グループ合計
             </Td>
             <Td align="right" bold accent>
@@ -185,7 +189,7 @@ export default function CollectionSheet({ group, rows, year, month, config }) {
       </div>
       <div style={{ marginTop: 10, fontSize: 9, color: '#94a3b8' }}>
         ※
-        大会・合宿・その他費用は今月実際に使われた項目名がそのまま列になっています。「○○補助」はチームが負担した補助額（マイナス表示）です。治療費補助も同様にマイナス表示です。領収欄は集金確認用のチェック欄です。
+        大会・合宿・その他費用は今月実際に使われた項目名がそのまま列になっています。「○○補助」はチームが負担した補助額（マイナス表示）です。治療費補助・モチベーション費補助も同様にマイナス表示です。領収欄は集金確認用のチェック欄です。
       </div>
     </div>
   )

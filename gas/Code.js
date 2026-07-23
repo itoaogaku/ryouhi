@@ -50,6 +50,7 @@ var SHEETS = {
       'medical_subsidy',
       'sagawa_fee',
       'wear_fee',
+      'motivation_count',
     ],
   },
   tournament_items: {
@@ -61,7 +62,7 @@ var SHEETS = {
     headers: ['year_month', 'member_id', 'name', 'fee_per_night', 'nights'],
   },
   other_items: {
-    // 佐川代と同じイメージで、自由に名前を付けて追加できる費用項目
+    // 配達代と同じイメージで、自由に名前を付けて追加できる費用項目
     // subsidy（チーム補助額）は既存データの列位置を崩さないよう末尾に追加
     name: 'other_items',
     headers: ['year_month', 'member_id', 'name', 'amount', 'subsidy'],
@@ -858,7 +859,7 @@ function saveExpenses(yearMonth, expenses, tournamentItems, campItems, otherItem
   campItems = campItems || [];
   otherItems = otherItems || [];
 
-  // --- monthly_expenses（治療/佐川/ウエア）を UPSERT ---
+  // --- monthly_expenses（治療/配達代/ウエア/モチベーション費補助）を UPSERT ---
   var sheet = getSheet_(SHEETS.monthly_expenses.name);
   var headers = SHEETS.monthly_expenses.headers;
   var values = getBody_(sheet);
@@ -886,6 +887,7 @@ function saveExpenses(yearMonth, expenses, tournamentItems, campItems, otherItem
       num_(e.medical_subsidy),
       num_(e.sagawa_fee),
       num_(e.wear_fee),
+      num_(e.motivation_count),
     ];
   }
 
@@ -1073,6 +1075,7 @@ function readExpenses_(yearMonth) {
       medical_subsidy: num_(r[7]),
       sagawa_fee: num_(r[8]),
       wear_fee: num_(r[9]),
+      motivation_count: num_(r[10]),
     });
   }
   return out;

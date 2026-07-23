@@ -1,5 +1,5 @@
 import { num, compareMembersByGradeKana } from './utils.js'
-import { MEAL_TRACKING_DORMS } from './constants.js'
+import { MEAL_TRACKING_DORMS, MOTIVATION_FEE_PER_UNIT } from './constants.js'
 
 // -------------------------------------------------------------
 // 清算計算ロジック
@@ -10,7 +10,8 @@ import { MEAL_TRACKING_DORMS } from './constants.js'
 //   + 大会費合計   … 各大会（参加費 − 補助）の合計 ※0円未満は0円
 //   + 合宿費合計   … 各合宿（1泊単価 × 泊数）の合計
 //   + (治療費実費 − 治療費補助金)
-//   + 佐川代
+//   − モチベーション費補助 … 補助回数 × 単価(770円)
+//   + 配達代
 //   + その他費用合計 … 自由に名前を付けて追加できる項目（教材費・保険料など、
 //     各項目 金額−補助 の合計。0円未満は0円）
 //   + 食費 … 食べた寮ごとの単価（1寮/2寮で別設定）× 朝食数・夕食数の合計
@@ -51,6 +52,11 @@ export function countMeals(mealLogs, memberId, yearMonth) {
 // 治療費の請求差額（マイナスにはしない）
 export function medicalNet(expense) {
   return Math.max(0, num(expense.medical_actual) - num(expense.medical_subsidy))
+}
+
+// モチベーション費補助額（補助回数 × 単価770円）
+export function motivationSubsidyAmount(expense) {
+  return num(expense?.motivation_count) * MOTIVATION_FEE_PER_UNIT
 }
 
 // 大会1件の請求額（参加費 − 補助、0円未満は0円）
@@ -101,6 +107,8 @@ export function computeSettlement({
   const camp = campRows.reduce((a, r) => a + r.cost, 0)
 
   const medical = medicalNet(expense || {})
+  const motivationCount = num(expense?.motivation_count)
+  const motivation = motivationSubsidyAmount(expense || {})
   const sagawa = num(expense?.sagawa_fee)
 
   // その他費用明細（自由記名の追加項目、チーム補助ありのケースにも対応）
@@ -136,7 +144,7 @@ export function computeSettlement({
   const mealFee = breakfastFee + dinnerFee
 
   const total =
-    clubFee + tournament + camp + medical + sagawa + other + mealFee
+    clubFee + tournament + camp + medical - motivation + sagawa + other + mealFee
 
   return {
     memberId: member.id,
@@ -155,6 +163,9 @@ export function computeSettlement({
     medical,
     medicalActual: num(expense?.medical_actual),
     medicalSubsidy: num(expense?.medical_subsidy),
+    // モチベーション費補助
+    motivationCount,
+    motivation,
     // その他（自由記名の追加項目）
     otherRows,
     otherGross,
