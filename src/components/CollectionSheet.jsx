@@ -1,5 +1,5 @@
 import React from 'react'
-import { formatYen, formatYearMonthJa } from '../lib/utils.js'
+import { formatYen, formatYearMonthJa, num } from '../lib/utils.js'
 import { MEAL_TRACKING_DORMS } from '../lib/constants.js'
 import { mealPriceFor } from '../lib/calc.js'
 
@@ -7,12 +7,94 @@ import { mealPriceFor } from '../lib/calc.js'
 // 集金用A4シート（1グループ = 1ページ）
 // html2canvas で画像化するため、インラインスタイル中心で
 // 固定幅（A4 = 794px @ 96dpi）で描画します。
+//
+// 大会・合宿・その他費用は、その月にこのグループで実際に使われた
+// 項目名をそのまま列見出しにする（従来の紙の集金表と同じ見た目にして
+// 寮生が戸惑わないようにするため）。治療費・治療費補助や各項目の補助は
+// 別列に分け、補助はマイナス表示にする。
 // -------------------------------------------------------------
 
 const PAGE_WIDTH = 794 // A4 幅 (96dpi)
 
+// 指定した明細配列（tournamentRows/campRows/otherRows）から、その月に
+// 実際に使われた項目名を初出順で集める
+function collectItemNames(rows, key) {
+  const names = []
+  const seen = new Set()
+  for (const r of rows) {
+    for (const item of r[key] || []) {
+      if (!seen.has(item.name)) {
+        seen.add(item.name)
+        names.push(item.name)
+      }
+    }
+  }
+  return names
+}
+
+// 指定項目名について、補助が実際に使われているか（1人でも補助>0なら列を出す）
+function nameHasSubsidy(rows, key, name) {
+  return rows.some((r) =>
+    (r[key] || []).some((item) => item.name === name && num(item.subsidy) > 0)
+  )
+}
+
+// 指定メンバー・項目名の合計値を取得（同名項目が複数あれば合算）。
+// 該当項目が無ければ null を返す
+function sumItemField(list, name, field) {
+  const matches = (list || []).filter((it) => it.name === name)
+  if (matches.length === 0) return null
+  return matches.reduce((a, it) => a + num(it[field]), 0)
+}
+
 export default function CollectionSheet({ group, rows, year, month, config }) {
   const totalSum = rows.reduce((a, r) => a + r.total, 0)
+
+  const tournamentNames = collectItemNames(rows, 'tournamentRows')
+  const campNames = collectItemNames(rows, 'campRows')
+  const otherNames = collectItemNames(rows, 'otherRows')
+
+  // 表示する列を組み立てる（大会・その他は補助が使われている項目だけ補助列も追加）
+  const dynamicCols = [
+    ...tournamentNames.flatMap((name) => {
+      const cols = [{ type: 'tournament', name, field: 'fee', label: name }]
+      if (nameHasSubsidy(rows, 'tournamentRows', name)) {
+        cols.push({
+          type: 'tournament',
+          name,
+          field: 'subsidy',
+          label: `${name}補助`,
+          isSubsidy: true,
+        })
+      }
+      return cols
+    }),
+    ...campNames.map((name) => ({ type: 'camp', name, field: 'cost', label: name })),
+    ...otherNames.flatMap((name) => {
+      const cols = [{ type: 'other', name, field: 'amount', label: name }]
+      if (nameHasSubsidy(rows, 'otherRows', name)) {
+        cols.push({
+          type: 'other',
+          name,
+          field: 'subsidy',
+          label: `${name}補助`,
+          isSubsidy: true,
+        })
+      }
+      return cols
+    }),
+  ]
+
+  const listKeyOf = { tournament: 'tournamentRows', camp: 'campRows', other: 'otherRows' }
+
+  function cellValue(r, col) {
+    const v = sumItemField(r[listKeyOf[col.type]], col.name, col.field)
+    if (v === null || v === 0) return '—'
+    return col.isSubsidy ? `-${formatYen(v)}` : formatYen(v)
+  }
+
+  // 列が多い月でも収まるよう、内容量に応じて自動幅にする
+  const totalCols = 5 + dynamicCols.length + 3 // No/氏名/ランク/部費/食費 + 動的列 + 治療費/治療費補助/佐川 + 合計/領収(概算)
 
   return (
     <div
@@ -67,71 +149,82 @@ export default function CollectionSheet({ group, rows, year, month, config }) {
         ))}
       </div>
 
-      {/* テーブル */}
+      {/* テーブル（大会・合宿・その他費用はその月に実際に使われた項目名がそのまま列見出しになる） */}
       <table
         style={{
           width: '100%',
           borderCollapse: 'collapse',
-          fontSize: 10.5,
-          tableLayout: 'fixed',
+          fontSize: totalCols > 14 ? 8 : totalCols > 11 ? 9 : 10.5,
+          tableLayout: 'auto',
         }}
       >
         <thead>
           <tr style={{ background: '#eff6ff' }}>
-            <Th w="4%" align="center">No</Th>
-            <Th w="16%">氏名</Th>
-            <Th w="9%">ランク</Th>
-            <Th w="9%" align="right">部費</Th>
-            <Th w="10%" align="right">食費</Th>
-            <Th w="9%" align="right">大会費</Th>
-            <Th w="9%" align="right">合宿費</Th>
-            <Th w="9%" align="right">治療費</Th>
-            <Th w="8%" align="right">その他</Th>
-            <Th w="11%" align="right">合計</Th>
-            <Th w="6%" align="center">領収</Th>
+            <Th align="center">No</Th>
+            <Th>氏名</Th>
+            <Th>ランク</Th>
+            <Th align="right">部費</Th>
+            <Th align="right">食費</Th>
+            {dynamicCols.map((col, i) => (
+              <Th key={`${col.type}-${col.name}-${col.field}-${i}`} align="right">
+                {col.label}
+              </Th>
+            ))}
+            <Th align="right">治療費</Th>
+            <Th align="right">治療費補助</Th>
+            <Th align="right">佐川</Th>
+            <Th align="right">合計</Th>
+            <Th align="center">領収</Th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((r, i) => {
-            const other = r.sagawa + r.other
-            return (
-              <tr
-                key={r.memberId}
-                style={{ background: i % 2 === 1 ? '#f8fafc' : '#ffffff' }}
-              >
-                <Td align="center" muted>{i + 1}</Td>
-                <Td bold>{r.name}</Td>
-                <Td muted>{r.rank}</Td>
-                <Td align="right">{formatYen(r.clubFee)}</Td>
-                <Td align="right">
-                  {formatYen(r.mealFee)}
-                  <div style={{ fontSize: 8, color: '#94a3b8' }}>
-                    朝{r.breakfastCount}・夕{r.dinnerCount}
-                  </div>
+          {rows.map((r, i) => (
+            <tr
+              key={r.memberId}
+              style={{ background: i % 2 === 1 ? '#f8fafc' : '#ffffff' }}
+            >
+              <Td align="center" muted>{i + 1}</Td>
+              <Td bold>{r.name}</Td>
+              <Td muted>{r.rank}</Td>
+              <Td align="right">{formatYen(r.clubFee)}</Td>
+              <Td align="right">
+                {formatYen(r.mealFee)}
+                <div style={{ fontSize: 8, color: '#94a3b8' }}>
+                  朝{r.breakfastCount}・夕{r.dinnerCount}
+                </div>
+              </Td>
+              {dynamicCols.map((col, ci) => (
+                <Td
+                  key={`${col.type}-${col.name}-${col.field}-${ci}`}
+                  align="right"
+                  danger={col.isSubsidy}
+                >
+                  {cellValue(r, col)}
                 </Td>
-                <Td align="right">{r.tournament ? formatYen(r.tournament) : '—'}</Td>
-                <Td align="right">{r.camp ? formatYen(r.camp) : '—'}</Td>
-                <Td align="right">{r.medical ? formatYen(r.medical) : '—'}</Td>
-                <Td align="right">{other ? formatYen(other) : '—'}</Td>
-                <Td align="right" bold accent>{formatYen(r.total)}</Td>
-                <Td align="center">
-                  <span
-                    style={{
-                      display: 'inline-block',
-                      width: 16,
-                      height: 16,
-                      border: '1.5px solid #94a3b8',
-                      borderRadius: 3,
-                    }}
-                  />
-                </Td>
-              </tr>
-            )
-          })}
+              ))}
+              <Td align="right">{r.medicalActual ? formatYen(r.medicalActual) : '—'}</Td>
+              <Td align="right" danger={r.medicalSubsidy > 0}>
+                {r.medicalSubsidy > 0 ? `-${formatYen(r.medicalSubsidy)}` : '—'}
+              </Td>
+              <Td align="right">{r.sagawa ? formatYen(r.sagawa) : '—'}</Td>
+              <Td align="right" bold accent>{formatYen(r.total)}</Td>
+              <Td align="center">
+                <span
+                  style={{
+                    display: 'inline-block',
+                    width: 16,
+                    height: 16,
+                    border: '1.5px solid #94a3b8',
+                    borderRadius: 3,
+                  }}
+                />
+              </Td>
+            </tr>
+          ))}
         </tbody>
         <tfoot>
           <tr style={{ background: '#dbeafe' }}>
-            <Td align="right" bold colSpan={9}>
+            <Td align="right" bold colSpan={4 + dynamicCols.length + 3}>
               グループ合計
             </Td>
             <Td align="right" bold accent>
@@ -141,9 +234,6 @@ export default function CollectionSheet({ group, rows, year, month, config }) {
           </tr>
         </tfoot>
       </table>
-
-      {/* 大会・合宿 明細（対象者のみ） */}
-      <BreakdownSection rows={rows} />
 
       {/* フッター（集金係記入欄） */}
       <div
@@ -164,155 +254,23 @@ export default function CollectionSheet({ group, rows, year, month, config }) {
       </div>
       <div style={{ marginTop: 10, fontSize: 9, color: '#94a3b8' }}>
         ※
-        大会費は「参加費 − 補助 = 請求額」、合宿費は「1泊単価 ×
-        泊数」、治療費は「実費 − チーム補助金」です。「その他」列は佐川代・その他費用（自由項目）の合計です。領収欄は集金確認用のチェック欄です。
+        大会・合宿・その他費用は今月実際に使われた項目名がそのまま列になっています。「○○補助」はチームが負担した補助額（マイナス表示）です。治療費補助も同様にマイナス表示です。領収欄は集金確認用のチェック欄です。
       </div>
     </div>
   )
 }
 
-// 大会・合宿・その他費用の明細（名前・金額つき）。対象者がいなければ非表示。
-function BreakdownSection({ rows }) {
-  const withTournament = rows.filter((r) => r.tournamentRows.length > 0)
-  const withCamp = rows.filter((r) => r.campRows.length > 0)
-  const withOther = rows.filter((r) => r.otherRows.length > 0)
-  if (
-    withTournament.length === 0 &&
-    withCamp.length === 0 &&
-    withOther.length === 0
-  )
-    return null
-
-  return (
-    <div style={{ marginTop: 16 }}>
-      <div
-        style={{
-          fontSize: 12,
-          fontWeight: 700,
-          color: '#1e40af',
-          borderBottom: '1.5px solid #bfdbfe',
-          paddingBottom: 3,
-          marginBottom: 6,
-        }}
-      >
-        大会・合宿・その他費用 明細
-      </div>
-
-      {withTournament.length > 0 && (
-        <div
-          style={{
-            marginBottom: withCamp.length > 0 || withOther.length > 0 ? 8 : 0,
-          }}
-        >
-          <div style={{ fontSize: 10, fontWeight: 700, color: '#b45309', marginBottom: 3 }}>
-            ● 大会（参加費 − 補助 = 請求額）
-          </div>
-          {withTournament.map((r) => (
-            <div
-              key={r.memberId}
-              style={{
-                fontSize: 9.5,
-                color: '#334155',
-                padding: '2px 0',
-                borderBottom: '1px dotted #e2e8f0',
-                lineHeight: 1.5,
-              }}
-            >
-              <span style={{ fontWeight: 700 }}>{r.name}</span>：{' '}
-              {r.tournamentRows.map((t, i) => (
-                <span key={i}>
-                  {i > 0 && '／ '}
-                  {t.name} 参加{formatYen(t.fee)}・補助{formatYen(t.subsidy)}→
-                  <span style={{ fontWeight: 700, color: '#2563eb' }}>
-                    請求{formatYen(t.net)}
-                  </span>{' '}
-                </span>
-              ))}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {withCamp.length > 0 && (
-        <div style={{ marginBottom: withOther.length > 0 ? 8 : 0 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: '#047857', marginBottom: 3 }}>
-            ● 合宿（1泊単価 × 泊数 = 費用）
-          </div>
-          {withCamp.map((r) => (
-            <div
-              key={r.memberId}
-              style={{
-                fontSize: 9.5,
-                color: '#334155',
-                padding: '2px 0',
-                borderBottom: '1px dotted #e2e8f0',
-                lineHeight: 1.5,
-              }}
-            >
-              <span style={{ fontWeight: 700 }}>{r.name}</span>：{' '}
-              {r.campRows.map((c, i) => (
-                <span key={i}>
-                  {i > 0 && '／ '}
-                  {c.name} {formatYen(c.perNight)}×{c.nights}泊=
-                  <span style={{ fontWeight: 700, color: '#047857' }}>
-                    {formatYen(c.cost)}
-                  </span>{' '}
-                </span>
-              ))}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {withOther.length > 0 && (
-        <div>
-          <div style={{ fontSize: 10, fontWeight: 700, color: '#0369a1', marginBottom: 3 }}>
-            ● その他費用（自由項目、金額 − 補助 = 請求額）
-          </div>
-          {withOther.map((r) => (
-            <div
-              key={r.memberId}
-              style={{
-                fontSize: 9.5,
-                color: '#334155',
-                padding: '2px 0',
-                borderBottom: '1px dotted #e2e8f0',
-                lineHeight: 1.5,
-              }}
-            >
-              <span style={{ fontWeight: 700 }}>{r.name}</span>：{' '}
-              {r.otherRows.map((o, i) => (
-                <span key={i}>
-                  {i > 0 && '／ '}
-                  {o.name}{' '}
-                  {o.subsidy > 0
-                    ? `金額${formatYen(o.amount)}・補助${formatYen(o.subsidy)}→`
-                    : ''}
-                  <span style={{ fontWeight: 700, color: '#0369a1' }}>
-                    {' '}
-                    {formatYen(o.net)}
-                  </span>{' '}
-                </span>
-              ))}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function Th({ children, w, align = 'left' }) {
+function Th({ children, align = 'left' }) {
   return (
     <th
       style={{
-        width: w,
         textAlign: align,
-        padding: '7px 6px',
+        padding: '6px 4px',
         borderBottom: '2px solid #bfdbfe',
-        fontSize: 10,
+        fontSize: '1em',
         color: '#1e40af',
         fontWeight: 700,
+        wordBreak: 'break-all',
       }}
     >
       {children}
@@ -320,18 +278,24 @@ function Th({ children, w, align = 'left' }) {
   )
 }
 
-function Td({ children, align = 'left', bold, muted, accent, colSpan }) {
+function Td({ children, align = 'left', bold, muted, accent, danger, colSpan }) {
   return (
     <td
       colSpan={colSpan}
       style={{
         textAlign: align,
-        padding: '6px 6px',
+        padding: '5px 5px',
         borderBottom: '1px solid #e2e8f0',
         fontWeight: bold ? 700 : 400,
-        color: accent ? '#2563eb' : muted ? '#94a3b8' : '#0f172a',
+        color: danger
+          ? '#dc2626'
+          : accent
+          ? '#2563eb'
+          : muted
+          ? '#94a3b8'
+          : '#0f172a',
         fontVariantNumeric: 'tabular-nums',
-        wordBreak: 'break-all',
+        whiteSpace: 'nowrap',
       }}
     >
       {children}
