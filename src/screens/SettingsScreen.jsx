@@ -9,9 +9,12 @@ import {
   Textarea,
   Skeleton,
 } from '../components/ui/index.jsx'
+import { MEAL_TRACKING_DORMS } from '../lib/constants.js'
 import { num } from '../lib/utils.js'
+import { mealPriceFor } from '../lib/calc.js'
 
 // 画面：規定（食費単価・部費と、寮費清算の細かいルールのメモ）
+// 食費単価は1寮・2寮でそれぞれ別に設定できる
 export default function SettingsScreen() {
   const { config, loading, saveConfig } = useApp()
   const [form, setForm] = useState(() => buildForm(config))
@@ -22,6 +25,17 @@ export default function SettingsScreen() {
     setForm(buildForm(config))
     setDirty(false)
   }, [config])
+
+  const updatePrice = (dorm, meal, value) => {
+    setForm((prev) => ({
+      ...prev,
+      prices: {
+        ...prev.prices,
+        [dorm]: { ...prev.prices[dorm], [meal]: value },
+      },
+    }))
+    setDirty(true)
+  }
 
   const update = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }))
@@ -36,12 +50,15 @@ export default function SettingsScreen() {
   const handleSave = async () => {
     setSaving(true)
     try {
-      await saveConfig({
-        breakfast_price: num(form.breakfast_price),
-        dinner_price: num(form.dinner_price),
+      const payload = {
         base_club_fee: num(form.base_club_fee),
         notes: form.notes,
-      })
+      }
+      for (const dorm of MEAL_TRACKING_DORMS) {
+        payload[`breakfast_price_${dorm}`] = num(form.prices[dorm]?.breakfast)
+        payload[`dinner_price_${dorm}`] = num(form.prices[dorm]?.dinner)
+      }
+      await saveConfig(payload)
       setDirty(false)
     } finally {
       setSaving(false)
@@ -74,52 +91,85 @@ export default function SettingsScreen() {
         <CardContent className="space-y-4 p-4">
           <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-700">
             <Coins className="h-4 w-4 text-amber-500" />
-            食費・部費の単価
+            食費の単価（寮ごと）
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">
-                朝食単価（1食あたり）
-              </label>
-              <Input
-                type="number"
-                min={0}
-                value={form.breakfast_price === 0 ? '' : form.breakfast_price}
-                placeholder="0"
-                onChange={(e) => update('breakfast_price', num(e.target.value))}
-                className="text-right tabular-nums"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">
-                夕食単価（1食あたり）
-              </label>
-              <Input
-                type="number"
-                min={0}
-                value={form.dinner_price === 0 ? '' : form.dinner_price}
-                placeholder="0"
-                onChange={(e) => update('dinner_price', num(e.target.value))}
-                className="text-right tabular-nums"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">
-                部費（月額・一律）
-              </label>
-              <Input
-                type="number"
-                min={0}
-                value={form.base_club_fee === 0 ? '' : form.base_club_fee}
-                placeholder="0"
-                onChange={(e) => update('base_club_fee', num(e.target.value))}
-                className="text-right tabular-nums"
-              />
-            </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs font-medium text-slate-500">
+                  <th className="w-40 py-1.5"></th>
+                  {MEAL_TRACKING_DORMS.map((dorm) => (
+                    <th key={dorm} className="px-2 py-1.5 text-right">
+                      {dorm}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className="py-1.5 pr-3 text-xs font-medium text-slate-500">
+                    朝食単価（1食あたり）
+                  </td>
+                  {MEAL_TRACKING_DORMS.map((dorm) => (
+                    <td key={dorm} className="px-2 py-1.5">
+                      <Input
+                        type="number"
+                        min={0}
+                        value={
+                          form.prices[dorm]?.breakfast === 0
+                            ? ''
+                            : form.prices[dorm]?.breakfast
+                        }
+                        placeholder="0"
+                        onChange={(e) =>
+                          updatePrice(dorm, 'breakfast', num(e.target.value))
+                        }
+                        className="text-right tabular-nums"
+                      />
+                    </td>
+                  ))}
+                </tr>
+                <tr>
+                  <td className="py-1.5 pr-3 text-xs font-medium text-slate-500">
+                    夕食単価（1食あたり）
+                  </td>
+                  {MEAL_TRACKING_DORMS.map((dorm) => (
+                    <td key={dorm} className="px-2 py-1.5">
+                      <Input
+                        type="number"
+                        min={0}
+                        value={
+                          form.prices[dorm]?.dinner === 0
+                            ? ''
+                            : form.prices[dorm]?.dinner
+                        }
+                        placeholder="0"
+                        onChange={(e) =>
+                          updatePrice(dorm, 'dinner', num(e.target.value))
+                        }
+                        className="text-right tabular-nums"
+                      />
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div className="max-w-xs">
+            <label className="mb-1 block text-xs font-medium text-slate-500">
+              部費（月額・一律）
+            </label>
+            <Input
+              type="number"
+              min={0}
+              value={form.base_club_fee === 0 ? '' : form.base_club_fee}
+              placeholder="0"
+              onChange={(e) => update('base_club_fee', num(e.target.value))}
+              className="text-right tabular-nums"
+            />
           </div>
           <p className="text-xs text-slate-400">
-            食費 = 朝食数 × 朝食単価 + 夕食数 ×
-            夕食単価で計算され、清算画面・集金用PDFに反映されます。
+            食費は「実際に食事をとった寮」の単価で計算されます（寮間移動でもう一方の寮で食べた日はその寮の単価が使われます）。清算画面・集金用PDFに反映されます。
           </p>
         </CardContent>
       </Card>
@@ -146,9 +196,15 @@ export default function SettingsScreen() {
 }
 
 function buildForm(config) {
+  const prices = {}
+  for (const dorm of MEAL_TRACKING_DORMS) {
+    prices[dorm] = {
+      breakfast: num(mealPriceFor(config, dorm, 'breakfast')),
+      dinner: num(mealPriceFor(config, dorm, 'dinner')),
+    }
+  }
   return {
-    breakfast_price: num(config.breakfast_price),
-    dinner_price: num(config.dinner_price),
+    prices,
     base_club_fee: num(config.base_club_fee),
     notes: config.notes || '',
   }

@@ -1,4 +1,5 @@
 import { num, compareMembersByGradeKana } from './utils.js'
+import { MEAL_TRACKING_DORMS } from './constants.js'
 
 // -------------------------------------------------------------
 // 清算計算ロジック
@@ -12,20 +13,39 @@ import { num, compareMembersByGradeKana } from './utils.js'
 //   + 佐川代
 //   + その他費用合計 … 自由に名前を付けて追加できる項目（教材費・保険料など、
 //     各項目 金額−補助 の合計。0円未満は0円）
-//   + 食費(朝食数 × 朝食単価 + 夕食数 × 夕食単価)
+//   + 食費 … 食べた寮ごとの単価（1寮/2寮で別設定）× 朝食数・夕食数の合計
 // -------------------------------------------------------------
 
-// 指定メンバー・年月の食数を meal_logs から集計
+// 指定寮・食事の単価を config から取得する。
+// 寮ごとの単価（例: breakfast_price_1寮）が未設定の場合は、
+// 従来の共通単価（breakfast_price / dinner_price）にフォールバックする
+export function mealPriceFor(config, dorm, meal) {
+  const perDormKey = `${meal}_price_${dorm}`
+  const v = config?.[perDormKey]
+  if (v !== undefined && v !== null && v !== '') return num(v)
+  return num(config?.[`${meal}_price`])
+}
+
+// 指定メンバー・年月の食数を meal_logs から集計（寮ごとの内訳つき）
 export function countMeals(mealLogs, memberId, yearMonth) {
   let breakfast = 0
   let dinner = 0
+  const byDorm = {}
   for (const log of mealLogs) {
     if (String(log.member_id) !== String(memberId)) continue
     if (!String(log.date || '').startsWith(yearMonth)) continue
-    if (log.breakfast) breakfast += 1
-    if (log.dinner) dinner += 1
+    const dorm = log.dorm || ''
+    if (!byDorm[dorm]) byDorm[dorm] = { breakfast: 0, dinner: 0 }
+    if (log.breakfast) {
+      breakfast += 1
+      byDorm[dorm].breakfast += 1
+    }
+    if (log.dinner) {
+      dinner += 1
+      byDorm[dorm].dinner += 1
+    }
   }
-  return { breakfast, dinner }
+  return { breakfast, dinner, byDorm }
 }
 
 // 治療費の請求差額（マイナスにはしない）
@@ -96,8 +116,23 @@ export function computeSettlement({
 
   const breakfastCount = num(meals?.breakfast)
   const dinnerCount = num(meals?.dinner)
-  const breakfastFee = breakfastCount * num(config.breakfast_price)
-  const dinnerFee = dinnerCount * num(config.dinner_price)
+
+  // 食べた寮ごとに単価をかけて合計する（1寮/2寮で単価が異なる場合に対応）
+  const byDorm = meals?.byDorm || {}
+  const recognizedDorms = new Set(MEAL_TRACKING_DORMS)
+  let breakfastFee = 0
+  let dinnerFee = 0
+  for (const dorm of MEAL_TRACKING_DORMS) {
+    const counts = byDorm[dorm] || { breakfast: 0, dinner: 0 }
+    breakfastFee += counts.breakfast * mealPriceFor(config, dorm, 'breakfast')
+    dinnerFee += counts.dinner * mealPriceFor(config, dorm, 'dinner')
+  }
+  // 寮が未設定・不明な古いデータは共通単価にフォールバックする
+  for (const [dorm, counts] of Object.entries(byDorm)) {
+    if (recognizedDorms.has(dorm)) continue
+    breakfastFee += counts.breakfast * num(config.breakfast_price)
+    dinnerFee += counts.dinner * num(config.dinner_price)
+  }
   const mealFee = breakfastFee + dinnerFee
 
   const total =

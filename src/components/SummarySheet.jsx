@@ -1,5 +1,7 @@
 import React from 'react'
 import { formatYen, formatNumber, formatYearMonthJa } from '../lib/utils.js'
+import { MEAL_TRACKING_DORMS } from '../lib/constants.js'
+import { mealPriceFor } from '../lib/calc.js'
 
 // -------------------------------------------------------------
 // 全選手 清算一覧（A4横・全データ・複数ページ）
@@ -153,8 +155,14 @@ function Page({ items, pageIndex, pageCount, year, month, config }) {
           </span>
         </div>
         <div style={{ fontSize: 10, color: '#64748b' }}>
-          部費{formatYen(config.base_club_fee)}／朝{formatYen(config.breakfast_price)}・夕
-          {formatYen(config.dinner_price)}　|　Page {pageIndex + 1} / {pageCount}
+          部費{formatYen(config.base_club_fee)}
+          {MEAL_TRACKING_DORMS.map((dorm) => (
+            <span key={dorm}>
+              ／{dorm}朝{formatYen(mealPriceFor(config, dorm, 'breakfast'))}・夕
+              {formatYen(mealPriceFor(config, dorm, 'dinner'))}
+            </span>
+          ))}
+          　|　Page {pageIndex + 1} / {pageCount}
         </div>
       </div>
 

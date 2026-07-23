@@ -1,5 +1,7 @@
 import React from 'react'
 import { formatYen, formatYearMonthJa } from '../lib/utils.js'
+import { MEAL_TRACKING_DORMS } from '../lib/constants.js'
+import { mealPriceFor } from '../lib/calc.js'
 
 // -------------------------------------------------------------
 // 集金用A4シート（1グループ = 1ページ）
@@ -54,11 +56,15 @@ export default function CollectionSheet({ group, rows, year, month, config }) {
         </div>
       </div>
 
-      {/* 単価注記 */}
+      {/* 単価注記（食費は実際に食べた寮の単価。寮ごとに異なる場合がある） */}
       <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 10 }}>
-        部費 {formatYen(config.base_club_fee)}／朝食{' '}
-        {formatYen(config.breakfast_price)}・夕食{' '}
-        {formatYen(config.dinner_price)}
+        部費 {formatYen(config.base_club_fee)}
+        {MEAL_TRACKING_DORMS.map((dorm) => (
+          <span key={dorm}>
+            ／{dorm}: 朝食 {formatYen(mealPriceFor(config, dorm, 'breakfast'))}
+            ・夕食 {formatYen(mealPriceFor(config, dorm, 'dinner'))}
+          </span>
+        ))}
       </div>
 
       {/* テーブル */}

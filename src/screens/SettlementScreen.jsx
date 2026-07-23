@@ -13,7 +13,7 @@ import {
   Tag,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
-import { GROUPS } from '../lib/constants.js'
+import { GROUPS, MEAL_TRACKING_DORMS } from '../lib/constants.js'
 import {
   Button,
   Card,
@@ -27,6 +27,7 @@ import {
   buildSettlementRows,
   groupSettlementRows,
   sumTotals,
+  mealPriceFor,
 } from '../lib/calc.js'
 import { generateGroupPdf, generateSummaryPdf } from '../lib/pdf.js'
 import CollectionSheet from '../components/CollectionSheet.jsx'
@@ -366,8 +367,16 @@ export default function SettlementScreen() {
 
       <p className="text-xs text-muted-foreground">
         合計請求額 = 部費 + 大会費(各: 参加費−補助) + 合宿費(各: 単価×泊数) +
-        (治療費実費−補助金) + 佐川代 + その他費用(各項目の合計) + 食費(朝×
-        {formatYen(config.breakfast_price)} + 夕×{formatYen(config.dinner_price)})
+        (治療費実費−補助金) + 佐川代 + その他費用(各項目の合計) +
+        食費(実際に食べた寮ごとに 朝食数×朝食単価 + 夕食数×夕食単価。
+        {MEAL_TRACKING_DORMS.map((dorm, i) => (
+          <span key={dorm}>
+            {i > 0 && '、'}
+            {dorm}: 朝{formatYen(mealPriceFor(config, dorm, 'breakfast'))}・夕
+            {formatYen(mealPriceFor(config, dorm, 'dinner'))}
+          </span>
+        ))}
+        )
         ／ ▶ をクリックすると大会・合宿・その他費用の明細を確認できます。
       </p>
 
