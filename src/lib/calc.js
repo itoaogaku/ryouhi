@@ -10,7 +10,6 @@ import { num, compareMembersByGradeKana } from './utils.js'
 //   + 合宿費合計   … 各合宿（1泊単価 × 泊数）の合計
 //   + (治療費実費 − 治療費補助金)
 //   + 佐川代
-//   + ウエア代
 //   + その他費用合計 … 自由に名前を付けて追加できる項目（教材費・保険料など）の合計
 //   + 食費(朝食数 × 朝食単価 + 夕食数 × 夕食単価)
 // -------------------------------------------------------------
@@ -77,7 +76,6 @@ export function computeSettlement({
 
   const medical = medicalNet(expense || {})
   const sagawa = num(expense?.sagawa_fee)
-  const wear = num(expense?.wear_fee)
 
   // その他費用明細（自由記名の追加項目）
   const otherRows = (others || []).map((o) => ({
@@ -93,7 +91,7 @@ export function computeSettlement({
   const mealFee = breakfastFee + dinnerFee
 
   const total =
-    clubFee + tournament + camp + medical + sagawa + wear + other + mealFee
+    clubFee + tournament + camp + medical + sagawa + other + mealFee
 
   return {
     memberId: member.id,
@@ -118,7 +116,6 @@ export function computeSettlement({
     // 固定項目
     clubFee,
     sagawa,
-    wear,
     // 食費
     breakfastCount,
     dinnerCount,

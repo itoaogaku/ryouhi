@@ -18,7 +18,7 @@ Google Apps Script（GAS）を API サーバー兼データベースとして使
 | ---- | ---- | ---- |
 | 寮生マスター | 画面A | 40 名規模のメンバー一覧。追加・編集・削除・在籍/退寮の切替。ランク・グループはセレクトボックス。|
 | 食数管理 | 画面B | 日付選択（デフォルト今日）で朝食/夕食の喫食を 40 名グリッド表示。グループ・ランクでフィルタ、一括保存。|
-| 月次経費 | 画面C | 大会費・合宿費・治療費・佐川代・ウエア代をメンバー 1 行でスプレッドシート風に入力。治療差額を自動プレビュー、合宿単価はプリセット（2700/0/カスタム）。|
+| 月次経費 | 画面C | 大会費・合宿費・治療費・佐川代をメンバー 1 行でスプレッドシート風に入力。治療差額を自動プレビュー、合宿単価はプリセット（2700/0/カスタム）。|
 | 清算・PDF出力 | 画面D | 最終清算データ一覧と集金用 PDF 出力。集金グループごとに改ページした A4 PDF をダウンロード。|
 
 ### 清算計算ロジック
@@ -29,7 +29,6 @@ Google Apps Script（GAS）を API サーバー兼データベースとして使
            + 合宿単価 × 泊数
            + (治療費実費 − 治療費補助金)   ※0円未満は0円
            + 佐川代
-           + ウエア代
            + 食費(朝食数 × 朝食単価 + 夕食数 × 夕食単価)
 ```
 
@@ -135,7 +134,7 @@ npm run preview
 | ------ | -- |
 | `members` | `id`, `name`, `rank`, `group`, `active` |
 | `meal_logs` | `date` (YYYY-MM-DD), `member_id`, `breakfast`, `dinner` |
-| `monthly_expenses` | `year_month` (YYYY-MM), `member_id`, `tournament_fee`, `tournament_support_rate`, `camp_fee_per_night`, `camp_nights`, `medical_actual`, `medical_subsidy`, `sagawa_fee`, `wear_fee` |
+| `monthly_expenses` | `year_month` (YYYY-MM), `member_id`, `tournament_fee`, `tournament_support_rate`, `camp_fee_per_night`, `camp_nights`, `medical_actual`, `medical_subsidy`, `sagawa_fee`, `wear_fee`（廃止済み・アプリからは未使用。既存シートとの互換のため列だけ残存）|
 | `config` | `key`, `value`（例: `breakfast_price`=400, `dinner_price`=600, `base_club_fee`=3000）|
 | `users` | `id`, `name`, `email`, `pin_hash`, `pin_salt`, `active`, `created_at`（PINはハッシュのみ保存）|
 | `sessions` | `token`, `user_id`, `email`, `created_at`, `expires_at` |

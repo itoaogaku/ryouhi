@@ -41,11 +41,10 @@ const COLS = [
   { key: 'medicalSubsidy', label: '治療補助', w: '5%', align: 'right', money: true, sum: true },
   { key: 'medical', label: '治療差額', w: '5%', align: 'right', money: true, sum: true },
   { key: 'sagawa', label: '佐川', w: '4%', align: 'right', money: true, sum: true },
-  { key: 'wear', label: 'ウエア', w: '5%', align: 'right', money: true, sum: true },
   {
     key: 'other',
     label: 'その他',
-    w: '5%',
+    w: '8%',
     align: 'right',
     money: true,
     sum: true,
@@ -54,7 +53,7 @@ const COLS = [
   {
     key: 'total',
     label: '合計',
-    w: '8%',
+    w: '10%',
     align: 'right',
     money: true,
     sum: true,

@@ -203,7 +203,7 @@ function generateGuestMeals(year, month) {
   return guests
 }
 
-// 指定年月分の月次経費（治療・佐川・ウエア）を生成
+// 指定年月分の月次経費（治療・佐川）を生成
 function generateExpenses(members, year, month) {
   const yearMonth = toYearMonth(year, month)
   const expenses = []
@@ -221,9 +221,8 @@ function generateExpenses(members, year, month) {
       // 5人に1人が治療費
       medical_actual: s % 5 === 0 ? 3000 : 0,
       medical_subsidy: s % 5 === 0 ? 1000 : 0,
-      // 佐川・ウエアはランダム少額
+      // 佐川代はランダム少額
       sagawa_fee: s % 6 === 0 ? 800 : 0,
-      wear_fee: s % 7 === 0 ? 4500 : 0,
     })
   }
   return expenses

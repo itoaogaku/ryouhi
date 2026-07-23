@@ -253,7 +253,6 @@ export default function SettlementScreen() {
                   <th className="px-3 py-2.5 text-right">合宿費</th>
                   <th className="px-3 py-2.5 text-right">治療費</th>
                   <th className="px-3 py-2.5 text-right">佐川</th>
-                  <th className="px-3 py-2.5 text-right">ウエア</th>
                   <th className="px-3 py-2.5 text-right">その他</th>
                   <th className="px-3 py-2.5 text-right font-semibold text-slate-700">
                     合計請求額
@@ -328,9 +327,6 @@ export default function SettlementScreen() {
                           {r.sagawa ? formatYen(r.sagawa) : '—'}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums text-slate-600">
-                          {r.wear ? formatYen(r.wear) : '—'}
-                        </td>
-                        <td className="px-3 py-2 text-right tabular-nums text-slate-600">
                           {r.other ? formatYen(r.other) : '—'}
                           {r.otherRows.length > 0 && (
                             <span className="ml-1 text-[11px] text-slate-400">
@@ -344,7 +340,7 @@ export default function SettlementScreen() {
                       </tr>
                       {isOpen && hasDetail && (
                         <tr className="border-b border-slate-200 bg-slate-50/70">
-                          <td colSpan={13} className="px-4 py-3">
+                          <td colSpan={12} className="px-4 py-3">
                             <BreakdownDetail row={r} />
                           </td>
                         </tr>
@@ -355,7 +351,7 @@ export default function SettlementScreen() {
                 {displayRows.length === 0 && (
                   <tr>
                     <td
-                      colSpan={13}
+                      colSpan={12}
                       className="px-4 py-10 text-center text-sm text-muted-foreground"
                     >
                       対象データがありません
@@ -370,7 +366,7 @@ export default function SettlementScreen() {
 
       <p className="text-xs text-muted-foreground">
         合計請求額 = 部費 + 大会費(各: 参加費−補助) + 合宿費(各: 単価×泊数) +
-        (治療費実費−補助金) + 佐川代 + ウエア代 + その他費用(各項目の合計) + 食費(朝×
+        (治療費実費−補助金) + 佐川代 + その他費用(各項目の合計) + 食費(朝×
         {formatYen(config.breakfast_price)} + 夕×{formatYen(config.dinner_price)})
         ／ ▶ をクリックすると大会・合宿・その他費用の明細を確認できます。
       </p>

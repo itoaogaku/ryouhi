@@ -87,7 +87,7 @@ export default function CollectionSheet({ group, rows, year, month, config }) {
         </thead>
         <tbody>
           {rows.map((r, i) => {
-            const other = r.sagawa + r.wear + r.other
+            const other = r.sagawa + r.other
             return (
               <tr
                 key={r.memberId}
@@ -159,7 +159,7 @@ export default function CollectionSheet({ group, rows, year, month, config }) {
       <div style={{ marginTop: 10, fontSize: 9, color: '#94a3b8' }}>
         ※
         大会費は「参加費 − 補助 = 請求額」、合宿費は「1泊単価 ×
-        泊数」、治療費は「実費 − チーム補助金」です。「その他」列は佐川代・ウエア代・その他費用（自由項目）の合計です。領収欄は集金確認用のチェック欄です。
+        泊数」、治療費は「実費 − チーム補助金」です。「その他」列は佐川代・その他費用（自由項目）の合計です。領収欄は集金確認用のチェック欄です。
       </div>
     </div>
   )

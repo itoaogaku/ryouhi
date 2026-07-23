@@ -101,5 +101,4 @@ export const EXPENSE_LABELS = {
   camp: '合宿費',
   medical: '治療費',
   sagawa: '佐川代',
-  wear: 'ウエア代',
 }
