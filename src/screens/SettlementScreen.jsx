@@ -28,6 +28,8 @@ import {
   groupSettlementRows,
   sumTotals,
   mealPriceFor,
+  buildItemColumns,
+  itemColumnValue,
 } from '../lib/calc.js'
 import { generateGroupPdf, generateSummaryPdf } from '../lib/pdf.js'
 import CollectionSheet from '../components/CollectionSheet.jsx'
@@ -98,6 +100,13 @@ export default function SettlementScreen() {
     filterGroup === 'all'
       ? rows
       : rows.filter((r) => r.group === filterGroup)
+
+  // 大会・合宿・その他費用は、表示中の行で実際に使われた項目名がそのまま列見出しになる
+  const dynamicCols = useMemo(
+    () => buildItemColumns(displayRows),
+    [displayRows]
+  )
+  const detailColSpan = 10 + dynamicCols.length
 
   const grandTotal = sumTotals(rows)
   const avg = rows.length ? Math.round(grandTotal / rows.length) : 0
@@ -250,11 +259,14 @@ export default function SettlementScreen() {
                   <th className="px-3 py-2.5 text-left">ランク</th>
                   <th className="px-3 py-2.5 text-right">部費</th>
                   <th className="px-3 py-2.5 text-right">食費</th>
-                  <th className="px-3 py-2.5 text-right">大会費</th>
-                  <th className="px-3 py-2.5 text-right">合宿費</th>
+                  {dynamicCols.map((col) => (
+                    <th key={col.key} className="px-3 py-2.5 text-right">
+                      {col.label}
+                    </th>
+                  ))}
                   <th className="px-3 py-2.5 text-right">治療費</th>
+                  <th className="px-3 py-2.5 text-right">治療費補助</th>
                   <th className="px-3 py-2.5 text-right">佐川</th>
-                  <th className="px-3 py-2.5 text-right">その他</th>
                   <th className="px-3 py-2.5 text-right font-semibold text-slate-700">
                     合計請求額
                   </th>
@@ -305,35 +317,34 @@ export default function SettlementScreen() {
                             (朝{r.breakfastCount}/夕{r.dinnerCount})
                           </span>
                         </td>
+                        {dynamicCols.map((col) => {
+                          const v = itemColumnValue(r, col)
+                          return (
+                            <td
+                              key={col.key}
+                              className={cn(
+                                'px-3 py-2 text-right tabular-nums',
+                                col.isSubsidy ? 'text-red-600' : 'text-slate-600'
+                              )}
+                            >
+                              {v === null || v === 0
+                                ? '—'
+                                : col.isSubsidy
+                                ? `−${formatYen(v)}`
+                                : formatYen(v)}
+                            </td>
+                          )
+                        })}
                         <td className="px-3 py-2 text-right tabular-nums text-slate-600">
-                          {r.tournament ? formatYen(r.tournament) : '—'}
-                          {r.tournamentRows.length > 0 && (
-                            <span className="ml-1 text-[11px] text-slate-400">
-                              ({r.tournamentRows.length})
-                            </span>
-                          )}
+                          {r.medicalActual ? formatYen(r.medicalActual) : '—'}
                         </td>
-                        <td className="px-3 py-2 text-right tabular-nums text-slate-600">
-                          {r.camp ? formatYen(r.camp) : '—'}
-                          {r.campRows.length > 0 && (
-                            <span className="ml-1 text-[11px] text-slate-400">
-                              ({r.campRows.length})
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 text-right tabular-nums text-slate-600">
-                          {r.medical ? formatYen(r.medical) : '—'}
+                        <td className="px-3 py-2 text-right tabular-nums text-red-600">
+                          {r.medicalSubsidy > 0
+                            ? `−${formatYen(r.medicalSubsidy)}`
+                            : '—'}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums text-slate-600">
                           {r.sagawa ? formatYen(r.sagawa) : '—'}
-                        </td>
-                        <td className="px-3 py-2 text-right tabular-nums text-slate-600">
-                          {r.other ? formatYen(r.other) : '—'}
-                          {r.otherRows.length > 0 && (
-                            <span className="ml-1 text-[11px] text-slate-400">
-                              ({r.otherRows.length})
-                            </span>
-                          )}
                         </td>
                         <td className="px-3 py-2 text-right font-semibold tabular-nums text-primary">
                           {formatYen(r.total)}
@@ -341,7 +352,7 @@ export default function SettlementScreen() {
                       </tr>
                       {isOpen && hasDetail && (
                         <tr className="border-b border-slate-200 bg-slate-50/70">
-                          <td colSpan={12} className="px-4 py-3">
+                          <td colSpan={detailColSpan} className="px-4 py-3">
                             <BreakdownDetail row={r} />
                           </td>
                         </tr>
@@ -352,7 +363,7 @@ export default function SettlementScreen() {
                 {displayRows.length === 0 && (
                   <tr>
                     <td
-                      colSpan={12}
+                      colSpan={detailColSpan}
                       className="px-4 py-10 text-center text-sm text-muted-foreground"
                     >
                       対象データがありません

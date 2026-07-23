@@ -1,7 +1,7 @@
 import React from 'react'
-import { formatYen, formatYearMonthJa, num } from '../lib/utils.js'
+import { formatYen, formatYearMonthJa } from '../lib/utils.js'
 import { MEAL_TRACKING_DORMS } from '../lib/constants.js'
-import { mealPriceFor } from '../lib/calc.js'
+import { mealPriceFor, buildItemColumns, itemColumnValue } from '../lib/calc.js'
 
 // -------------------------------------------------------------
 // 集金用A4シート（1グループ = 1ページ）
@@ -16,79 +16,14 @@ import { mealPriceFor } from '../lib/calc.js'
 
 const PAGE_WIDTH = 794 // A4 幅 (96dpi)
 
-// 指定した明細配列（tournamentRows/campRows/otherRows）から、その月に
-// 実際に使われた項目名を初出順で集める
-function collectItemNames(rows, key) {
-  const names = []
-  const seen = new Set()
-  for (const r of rows) {
-    for (const item of r[key] || []) {
-      if (!seen.has(item.name)) {
-        seen.add(item.name)
-        names.push(item.name)
-      }
-    }
-  }
-  return names
-}
-
-// 指定項目名について、補助が実際に使われているか（1人でも補助>0なら列を出す）
-function nameHasSubsidy(rows, key, name) {
-  return rows.some((r) =>
-    (r[key] || []).some((item) => item.name === name && num(item.subsidy) > 0)
-  )
-}
-
-// 指定メンバー・項目名の合計値を取得（同名項目が複数あれば合算）。
-// 該当項目が無ければ null を返す
-function sumItemField(list, name, field) {
-  const matches = (list || []).filter((it) => it.name === name)
-  if (matches.length === 0) return null
-  return matches.reduce((a, it) => a + num(it[field]), 0)
-}
-
 export default function CollectionSheet({ group, rows, year, month, config }) {
   const totalSum = rows.reduce((a, r) => a + r.total, 0)
 
-  const tournamentNames = collectItemNames(rows, 'tournamentRows')
-  const campNames = collectItemNames(rows, 'campRows')
-  const otherNames = collectItemNames(rows, 'otherRows')
-
-  // 表示する列を組み立てる（大会・その他は補助が使われている項目だけ補助列も追加）
-  const dynamicCols = [
-    ...tournamentNames.flatMap((name) => {
-      const cols = [{ type: 'tournament', name, field: 'fee', label: name }]
-      if (nameHasSubsidy(rows, 'tournamentRows', name)) {
-        cols.push({
-          type: 'tournament',
-          name,
-          field: 'subsidy',
-          label: `${name}補助`,
-          isSubsidy: true,
-        })
-      }
-      return cols
-    }),
-    ...campNames.map((name) => ({ type: 'camp', name, field: 'cost', label: name })),
-    ...otherNames.flatMap((name) => {
-      const cols = [{ type: 'other', name, field: 'amount', label: name }]
-      if (nameHasSubsidy(rows, 'otherRows', name)) {
-        cols.push({
-          type: 'other',
-          name,
-          field: 'subsidy',
-          label: `${name}補助`,
-          isSubsidy: true,
-        })
-      }
-      return cols
-    }),
-  ]
-
-  const listKeyOf = { tournament: 'tournamentRows', camp: 'campRows', other: 'otherRows' }
+  // 大会・合宿・その他費用はその月に実際に使われた項目名がそのまま列見出しになる
+  const dynamicCols = buildItemColumns(rows)
 
   function cellValue(r, col) {
-    const v = sumItemField(r[listKeyOf[col.type]], col.name, col.field)
+    const v = itemColumnValue(r, col)
     if (v === null || v === 0) return '—'
     return col.isSubsidy ? `-${formatYen(v)}` : formatYen(v)
   }
@@ -165,8 +100,8 @@ export default function CollectionSheet({ group, rows, year, month, config }) {
             <Th>ランク</Th>
             <Th align="right">部費</Th>
             <Th align="right">食費</Th>
-            {dynamicCols.map((col, i) => (
-              <Th key={`${col.type}-${col.name}-${col.field}-${i}`} align="right">
+            {dynamicCols.map((col) => (
+              <Th key={col.key} align="right">
                 {col.label}
               </Th>
             ))}
@@ -193,12 +128,8 @@ export default function CollectionSheet({ group, rows, year, month, config }) {
                   朝{r.breakfastCount}・夕{r.dinnerCount}
                 </div>
               </Td>
-              {dynamicCols.map((col, ci) => (
-                <Td
-                  key={`${col.type}-${col.name}-${col.field}-${ci}`}
-                  align="right"
-                  danger={col.isSubsidy}
-                >
+              {dynamicCols.map((col) => (
+                <Td key={col.key} align="right" danger={col.isSubsidy}>
                   {cellValue(r, col)}
                 </Td>
               ))}

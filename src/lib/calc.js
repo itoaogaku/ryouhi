@@ -228,6 +228,118 @@ export function buildSettlementRows({
     })
 }
 
+// 指定した明細配列（tournamentRows/campRows/otherRows）から、
+// 実際に使われた項目名を初出順で集める
+function collectItemNames(rows, key) {
+  const names = []
+  const seen = new Set()
+  for (const r of rows) {
+    for (const item of r[key] || []) {
+      if (!seen.has(item.name)) {
+        seen.add(item.name)
+        names.push(item.name)
+      }
+    }
+  }
+  return names
+}
+
+// 指定項目名について、補助が実際に使われているか（1人でも補助>0なら列を出す）
+function itemNameHasSubsidy(rows, key, name) {
+  return rows.some((r) =>
+    (r[key] || []).some((item) => item.name === name && num(item.subsidy) > 0)
+  )
+}
+
+const ITEM_LIST_KEY_OF = {
+  tournament: 'tournamentRows',
+  camp: 'campRows',
+  other: 'otherRows',
+}
+
+// 大会・合宿・その他費用の動的列を組み立てる（従来の紙の集金表と同じく、
+// その月に実際に使われた項目名をそのまま列見出しにする）。
+// 大会・その他費用は補助が使われている項目だけ「〇〇補助」列も追加する
+export function buildItemColumns(rows) {
+  const tournamentNames = collectItemNames(rows, 'tournamentRows')
+  const campNames = collectItemNames(rows, 'campRows')
+  const otherNames = collectItemNames(rows, 'otherRows')
+
+  const cols = []
+  for (const name of tournamentNames) {
+    cols.push({
+      key: `tournament__${name}__fee`,
+      type: 'tournament',
+      name,
+      field: 'fee',
+      label: name,
+      money: true,
+      sum: true,
+      dynamic: true,
+    })
+    if (itemNameHasSubsidy(rows, 'tournamentRows', name)) {
+      cols.push({
+        key: `tournament__${name}__subsidy`,
+        type: 'tournament',
+        name,
+        field: 'subsidy',
+        label: `${name}補助`,
+        money: true,
+        sum: true,
+        dynamic: true,
+        isSubsidy: true,
+      })
+    }
+  }
+  for (const name of campNames) {
+    cols.push({
+      key: `camp__${name}__cost`,
+      type: 'camp',
+      name,
+      field: 'cost',
+      label: name,
+      money: true,
+      sum: true,
+      dynamic: true,
+    })
+  }
+  for (const name of otherNames) {
+    cols.push({
+      key: `other__${name}__amount`,
+      type: 'other',
+      name,
+      field: 'amount',
+      label: name,
+      money: true,
+      sum: true,
+      dynamic: true,
+    })
+    if (itemNameHasSubsidy(rows, 'otherRows', name)) {
+      cols.push({
+        key: `other__${name}__subsidy`,
+        type: 'other',
+        name,
+        field: 'subsidy',
+        label: `${name}補助`,
+        money: true,
+        sum: true,
+        dynamic: true,
+        isSubsidy: true,
+      })
+    }
+  }
+  return cols
+}
+
+// 動的列（大会・合宿・その他費用）の値を取得（同名項目が複数あれば合算）。
+// 該当項目が無ければ null を返す
+export function itemColumnValue(row, col) {
+  const list = row[ITEM_LIST_KEY_OF[col.type]] || []
+  const matches = list.filter((it) => it.name === col.name)
+  if (matches.length === 0) return null
+  return matches.reduce((a, it) => a + num(it[col.field]), 0)
+}
+
 // グループごとに清算行をまとめる（PDF改ページ用）
 export function groupSettlementRows(rows, groups) {
   return groups
