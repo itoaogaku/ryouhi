@@ -35,7 +35,12 @@ import {
   cn,
   compareMembersByGradeKana,
 } from '../lib/utils.js'
-import { medicalNet, tournamentItemNet, campItemCost } from '../lib/calc.js'
+import {
+  medicalNet,
+  tournamentItemNet,
+  campItemCost,
+  otherItemNet,
+} from '../lib/calc.js'
 
 // 画面C：月次経費入力（大会・合宿は明細で複数登録）
 export default function ExpensesScreen() {
@@ -97,6 +102,7 @@ export default function ExpensesScreen() {
             uid: uid(),
             name: o.name || '',
             amount: num(o.amount),
+            subsidy: num(o.subsidy),
           })),
         }
       }
@@ -311,9 +317,19 @@ export default function ExpensesScreen() {
         const found = cur.others.find((o) => o.name === event.name)
         const others = found
           ? cur.others.map((o) =>
-              o.name === event.name ? { ...o, amount: event.amount } : o
+              o.name === event.name
+                ? { ...o, amount: event.amount, subsidy: event.subsidy }
+                : o
             )
-          : [...cur.others, { uid: uid(), name: event.name, amount: event.amount }]
+          : [
+              ...cur.others,
+              {
+                uid: uid(),
+                name: event.name,
+                amount: event.amount,
+                subsidy: event.subsidy,
+              },
+            ]
         next[key] = { ...cur, others }
       }
       return next
@@ -364,12 +380,13 @@ export default function ExpensesScreen() {
           })
         }
         for (const o of r.others) {
-          if (!o.name && !num(o.amount)) continue
+          if (!o.name && !num(o.amount) && !num(o.subsidy)) continue
           otherList.push({
             year_month: yearMonth,
             member_id: m.id,
             name: o.name || 'その他',
             amount: num(o.amount),
+            subsidy: num(o.subsidy),
           })
         }
       }
@@ -488,7 +505,7 @@ export default function ExpensesScreen() {
                     0
                   )
                   const otherTotal = r.others.reduce(
-                    (a, o) => a + num(o.amount),
+                    (a, o) => a + otherItemNet(o),
                     0
                   )
                   const net = medicalNet(r)
@@ -659,7 +676,9 @@ export default function ExpensesScreen() {
       <p className="text-xs text-muted-foreground">
         ※ 行の ▶ を開くと「〇〇大会」「〇〇合宿」に加えて、佐川代と同じ
         イメージで名前を自由に付けられる「その他費用」も件数無制限で追加できます。
-        大会は参加費 − 補助 = 請求額、合宿は 1泊単価 × 泊数 = 費用を自動計算します。
+        大会は参加費 − 補助 = 請求額、合宿は 1泊単価 × 泊数 = 費用、
+        その他費用も金額 − 補助 = 請求額を自動計算するので、チームが一部
+        負担するケースにも対応できます。
       </p>
     </div>
   )
@@ -724,11 +743,9 @@ function BulkAddDialog({
     })
   }
 
-  const preview = isTournament
-    ? Math.max(0, num(fee) - computedSubsidy)
-    : isCamp
+  const preview = isCamp
     ? num(fee) * num(nights)
-    : num(fee)
+    : Math.max(0, num(fee) - computedSubsidy)
 
   const canApply = name.trim() !== '' && selected.size > 0
 
@@ -746,7 +763,10 @@ function BulkAddDialog({
         ids
       )
     } else {
-      onApplyOther({ name: name.trim(), amount: num(fee) }, ids)
+      onApplyOther(
+        { name: name.trim(), amount: num(fee), subsidy: computedSubsidy },
+        ids
+      )
     }
   }
 
@@ -821,11 +841,11 @@ function BulkAddDialog({
                 onChange={(e) => setName(e.target.value)}
               />
             </div>
-            {isTournament ? (
+            {isTournament || isOther ? (
               <>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-slate-500">
-                    参加費
+                    {isTournament ? '参加費' : '金額'}
                   </label>
                   <Input
                     type="number"
@@ -909,28 +929,14 @@ function BulkAddDialog({
                   />
                 </div>
               </>
-            ) : (
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500">
-                  金額
-                </label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={fee === 0 ? '' : fee}
-                  placeholder="0"
-                  onChange={(e) => setFee(num(e.target.value))}
-                  className="text-right tabular-nums"
-                />
-              </div>
-            )}
+            ) : null}
           </div>
           <p className="mt-2 text-xs text-slate-400">
             {isTournament
               ? '1人あたり請求額 = 参加費 − 補助（0円未満は0円）'
               : isCamp
               ? '1人あたり費用 = 1泊単価 × 泊数'
-              : '佐川代と同じイメージの追加項目です（1人あたり金額をそのまま請求）'}
+              : '1人あたり請求額 = 金額 − 補助（0円未満は0円）。チームが一部負担する場合も対応できます'}
             。登録後も各メンバーの行で個別に修正・削除できます。
           </p>
         </div>
@@ -1190,15 +1196,17 @@ function OtherEditor({ items, onAdd, onUpdate, onRemove }) {
         </p>
       ) : (
         <div className="space-y-2">
-          <div className="grid grid-cols-[1fr_84px_28px] gap-1.5 px-1 text-[10px] font-medium text-slate-400">
+          <div className="grid grid-cols-[1fr_76px_76px_76px_28px] gap-1.5 px-1 text-[10px] font-medium text-slate-400">
             <span>項目名</span>
             <span className="text-right">金額</span>
+            <span className="text-right">補助</span>
+            <span className="text-right">請求額</span>
             <span></span>
           </div>
           {items.map((o) => (
             <div
               key={o.uid}
-              className="grid grid-cols-[1fr_84px_28px] items-center gap-1.5"
+              className="grid grid-cols-[1fr_76px_76px_76px_28px] items-center gap-1.5"
             >
               <Input
                 value={o.name}
@@ -1210,6 +1218,13 @@ function OtherEditor({ items, onAdd, onUpdate, onRemove }) {
                 value={o.amount}
                 onChange={(v) => onUpdate(o.uid, 'amount', v)}
               />
+              <SmallNum
+                value={o.subsidy}
+                onChange={(v) => onUpdate(o.uid, 'subsidy', v)}
+              />
+              <div className="text-right text-xs font-semibold tabular-nums text-primary">
+                {formatYen(otherItemNet(o))}
+              </div>
               <button
                 onClick={() => onRemove(o.uid)}
                 className="flex h-7 w-7 items-center justify-center rounded text-slate-300 hover:bg-red-50 hover:text-destructive"

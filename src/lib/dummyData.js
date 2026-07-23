@@ -277,6 +277,7 @@ function generateCampItems(members, year, month) {
 const OTHER_ITEM_NAMES = ['教材費', '保険料', '寮内備品代']
 
 // その他費用（自由記名の追加項目）を一部メンバーに生成
+// （一部はチーム補助ありのケースも混ぜる）
 function generateOtherItems(members, year, month) {
   const yearMonth = toYearMonth(year, month)
   const items = []
@@ -284,11 +285,13 @@ function generateOtherItems(members, year, month) {
     if (!m.active) continue
     if (m.id % 8 !== 0) continue // 8人に1人
     const name = OTHER_ITEM_NAMES[m.id % OTHER_ITEM_NAMES.length]
+    const amount = 1000 + (m.id % 3) * 500
     items.push({
       year_month: yearMonth,
       member_id: m.id,
       name,
-      amount: 1000 + (m.id % 3) * 500,
+      amount,
+      subsidy: m.id % 16 === 0 ? Math.round(amount / 2) : 0,
     })
   }
   return items

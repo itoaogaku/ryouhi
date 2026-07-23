@@ -104,9 +104,10 @@ export function emptyCampItem() {
   return { uid: uid(), name: '', fee_per_night: 2700, nights: 0 }
 }
 
-// 空のその他費用明細（名前を自由に付けられる追加項目。例: 教材費・保険料など）
+// 空のその他費用明細（名前を自由に付けられる追加項目。例: 教材費・保険料など。
+// 金額 − 補助 = 請求額で、チームが一部負担するケースにも対応）
 export function emptyOtherItem() {
-  return { uid: uid(), name: '', amount: 0 }
+  return { uid: uid(), name: '', amount: 0, subsidy: 0 }
 }
 
 // 旧グループ名（例: 1階3階）を現在の名称（3階）に正規化する

@@ -508,19 +508,33 @@ function BreakdownDetail({ row }) {
               <tr className="text-[10px] text-slate-400">
                 <th className="py-1 text-left">項目名</th>
                 <th className="py-1 text-right">金額</th>
+                <th className="py-1 text-right">補助</th>
+                <th className="py-1 text-right">請求額</th>
               </tr>
             </thead>
             <tbody>
               {row.otherRows.map((o, idx) => (
                 <tr key={idx} className="border-t border-slate-100">
                   <td className="py-1 font-medium text-slate-700">{o.name}</td>
-                  <td className="py-1 text-right font-semibold tabular-nums text-sky-600">
+                  <td className="py-1 text-right tabular-nums text-slate-500">
                     {formatYen(o.amount)}
+                  </td>
+                  <td className="py-1 text-right tabular-nums text-slate-500">
+                    −{formatYen(o.subsidy)}
+                  </td>
+                  <td className="py-1 text-right font-semibold tabular-nums text-sky-600">
+                    {formatYen(o.net)}
                   </td>
                 </tr>
               ))}
               <tr className="border-t border-slate-200 font-semibold">
                 <td className="py-1 text-slate-600">小計</td>
+                <td className="py-1 text-right tabular-nums text-slate-400">
+                  {formatYen(row.otherGross)}
+                </td>
+                <td className="py-1 text-right tabular-nums text-slate-400">
+                  −{formatYen(row.otherSubsidy)}
+                </td>
                 <td className="py-1 text-right tabular-nums text-sky-600">
                   {formatYen(row.other)}
                 </td>

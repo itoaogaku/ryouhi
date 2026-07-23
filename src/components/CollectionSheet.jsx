@@ -261,7 +261,7 @@ function BreakdownSection({ rows }) {
       {withOther.length > 0 && (
         <div>
           <div style={{ fontSize: 10, fontWeight: 700, color: '#0369a1', marginBottom: 3 }}>
-            ● その他費用（自由項目）
+            ● その他費用（自由項目、金額 − 補助 = 請求額）
           </div>
           {withOther.map((r) => (
             <div
@@ -278,10 +278,13 @@ function BreakdownSection({ rows }) {
               {r.otherRows.map((o, i) => (
                 <span key={i}>
                   {i > 0 && '／ '}
-                  {o.name}
+                  {o.name}{' '}
+                  {o.subsidy > 0
+                    ? `金額${formatYen(o.amount)}・補助${formatYen(o.subsidy)}→`
+                    : ''}
                   <span style={{ fontWeight: 700, color: '#0369a1' }}>
                     {' '}
-                    {formatYen(o.amount)}
+                    {formatYen(o.net)}
                   </span>{' '}
                 </span>
               ))}

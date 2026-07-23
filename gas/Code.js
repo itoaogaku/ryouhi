@@ -61,9 +61,10 @@ var SHEETS = {
     headers: ['year_month', 'member_id', 'name', 'fee_per_night', 'nights'],
   },
   other_items: {
-    // 佐川代・ウエア代と同じイメージで、自由に名前を付けて追加できる費用項目
+    // 佐川代と同じイメージで、自由に名前を付けて追加できる費用項目
+    // subsidy（チーム補助額）は既存データの列位置を崩さないよう末尾に追加
     name: 'other_items',
-    headers: ['year_month', 'member_id', 'name', 'amount'],
+    headers: ['year_month', 'member_id', 'name', 'amount', 'subsidy'],
   },
   config: {
     name: 'config',
@@ -935,6 +936,7 @@ function saveExpenses(yearMonth, expenses, tournamentItems, campItems, otherItem
         Number(o.member_id),
         String(o.name || 'その他'),
         num_(o.amount),
+        num_(o.subsidy),
       ];
     })
   );
@@ -1127,6 +1129,7 @@ function readOtherItems_(yearMonth) {
       member_id: Number(r[1]),
       name: String(r[2]),
       amount: num_(r[3]),
+      subsidy: num_(r[4]),
     });
   }
   return out;

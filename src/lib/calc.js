@@ -10,7 +10,8 @@ import { num, compareMembersByGradeKana } from './utils.js'
 //   + 合宿費合計   … 各合宿（1泊単価 × 泊数）の合計
 //   + (治療費実費 − 治療費補助金)
 //   + 佐川代
-//   + その他費用合計 … 自由に名前を付けて追加できる項目（教材費・保険料など）の合計
+//   + その他費用合計 … 自由に名前を付けて追加できる項目（教材費・保険料など、
+//     各項目 金額−補助 の合計。0円未満は0円）
 //   + 食費(朝食数 × 朝食単価 + 夕食数 × 夕食単価)
 // -------------------------------------------------------------
 
@@ -40,6 +41,11 @@ export function tournamentItemNet(item) {
 // 合宿1件の費用（1泊単価 × 泊数）
 export function campItemCost(item) {
   return num(item.fee_per_night) * num(item.nights)
+}
+
+// その他費用1件の請求額（金額 − チーム補助、0円未満は0円）
+export function otherItemNet(item) {
+  return Math.max(0, num(item.amount) - num(item.subsidy))
 }
 
 // 1メンバー分の清算内訳を計算して返す
@@ -77,12 +83,16 @@ export function computeSettlement({
   const medical = medicalNet(expense || {})
   const sagawa = num(expense?.sagawa_fee)
 
-  // その他費用明細（自由記名の追加項目）
+  // その他費用明細（自由記名の追加項目、チーム補助ありのケースにも対応）
   const otherRows = (others || []).map((o) => ({
     name: o.name || 'その他',
     amount: num(o.amount),
+    subsidy: num(o.subsidy),
+    net: otherItemNet(o),
   }))
-  const other = otherRows.reduce((a, r) => a + r.amount, 0)
+  const otherGross = otherRows.reduce((a, r) => a + r.amount, 0)
+  const otherSubsidy = otherRows.reduce((a, r) => a + r.subsidy, 0)
+  const other = otherRows.reduce((a, r) => a + r.net, 0)
 
   const breakfastCount = num(meals?.breakfast)
   const dinnerCount = num(meals?.dinner)
@@ -112,6 +122,8 @@ export function computeSettlement({
     medicalSubsidy: num(expense?.medical_subsidy),
     // その他（自由記名の追加項目）
     otherRows,
+    otherGross,
+    otherSubsidy,
     other,
     // 固定項目
     clubFee,
