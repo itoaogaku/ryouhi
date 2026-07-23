@@ -238,7 +238,9 @@ export default function ExpensesScreen() {
     })
   }
 
-  // ---- 一括登録：選択メンバーに同じ大会を追加（同名は上書き） ----
+  // ---- 一括登録：選択メンバーに同じ大会を追加（同名は上書き）----
+  // 補助は参加者ごとに個別（全額補助／半額補助／その他補助）なので
+  // event.subsidyByMember（member_id -> 補助額）を参照する
   const applyBulkTournament = (event, memberIds) => {
     setRows((prev) => {
       const next = { ...prev }
@@ -246,11 +248,12 @@ export default function ExpensesScreen() {
         const key = String(id)
         const cur = next[key]
         if (!cur) continue
+        const subsidy = event.subsidyByMember?.[id] ?? 0
         const found = cur.tournaments.find((t) => t.name === event.name)
         const tournaments = found
           ? cur.tournaments.map((t) =>
               t.name === event.name
-                ? { ...t, fee: event.fee, subsidy: event.subsidy }
+                ? { ...t, fee: event.fee, subsidy }
                 : t
             )
           : [
@@ -259,7 +262,7 @@ export default function ExpensesScreen() {
                 uid: uid(),
                 name: event.name,
                 fee: event.fee,
-                subsidy: event.subsidy,
+                subsidy,
               },
             ]
         next[key] = { ...cur, tournaments }
@@ -703,7 +706,7 @@ function BulkAddDialog({
     () => new Set(members.map((m) => m.id))
   )
 
-  // 大会の補助: 半額補助／全額補助／その他（金額を直接入力）から選ぶ
+  // その他費用の補助: 半額補助／全額補助／その他（金額を直接入力）から選ぶ
   const [subsidyMode, setSubsidyMode] = useState('half') // 'half' | 'full' | 'custom'
   const [customSubsidy, setCustomSubsidy] = useState(0)
   const computedSubsidy =
@@ -712,6 +715,28 @@ function BulkAddDialog({
       : subsidyMode === 'full'
       ? num(fee)
       : num(customSubsidy)
+
+  // 大会の補助: 参加者ごとに「全額補助／半額補助／その他補助」を個別に選ぶ
+  // memberId -> { mode: 'full' | 'half' | 'custom', custom: number }
+  const [tournamentSubsidy, setTournamentSubsidy] = useState({})
+  const tournamentSubsidyFor = (memberId) => {
+    const s = tournamentSubsidy[memberId] || { mode: 'half', custom: 0 }
+    if (s.mode === 'full') return num(fee)
+    if (s.mode === 'half') return Math.round(num(fee) / 2)
+    return num(s.custom)
+  }
+  const setTournamentSubsidyMode = (memberId, mode) => {
+    setTournamentSubsidy((prev) => ({
+      ...prev,
+      [memberId]: { ...(prev[memberId] || { mode: 'half', custom: 0 }), mode },
+    }))
+  }
+  const setTournamentSubsidyCustom = (memberId, value) => {
+    setTournamentSubsidy((prev) => ({
+      ...prev,
+      [memberId]: { mode: 'custom', custom: value },
+    }))
+  }
 
   // 合宿の1泊単価: プリセット選択中は選択値を保持し、「カスタム」選択時のみ
   // 入力欄を表示する（fee の数値だけで判定すると 0円 プリセットと衝突するため
@@ -747,14 +772,24 @@ function BulkAddDialog({
     ? num(fee) * num(nights)
     : Math.max(0, num(fee) - computedSubsidy)
 
+  // 大会は参加者ごとに補助額が異なるため、参加者全員分の請求額合計を出す
+  const tournamentTotalNet = Array.from(selected).reduce(
+    (a, id) => a + Math.max(0, num(fee) - tournamentSubsidyFor(id)),
+    0
+  )
+
   const canApply = name.trim() !== '' && selected.size > 0
 
   const handleApply = () => {
     if (!canApply) return
     const ids = Array.from(selected)
     if (isTournament) {
+      const subsidyByMember = {}
+      for (const id of ids) {
+        subsidyByMember[id] = tournamentSubsidyFor(id)
+      }
       onApplyTournament(
-        { name: name.trim(), fee: num(fee), subsidy: computedSubsidy },
+        { name: name.trim(), fee: num(fee), subsidyByMember },
         ids
       )
     } else if (isCamp) {
@@ -794,13 +829,27 @@ function BulkAddDialog({
       footer={
         <div className="flex items-center justify-between gap-3">
           <div className="text-sm text-slate-500">
-            <span className="font-semibold text-slate-700">
-              {selected.size}名
-            </span>{' '}
-            を選択中 · 1人あたり{' '}
-            <span className="font-semibold text-primary">
-              {formatYen(preview)}
-            </span>
+            {isTournament ? (
+              <>
+                <span className="font-semibold text-slate-700">
+                  {selected.size}名
+                </span>{' '}
+                が参加 · 請求額合計{' '}
+                <span className="font-semibold text-primary">
+                  {formatYen(tournamentTotalNet)}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="font-semibold text-slate-700">
+                  {selected.size}名
+                </span>{' '}
+                を選択中 · 1人あたり{' '}
+                <span className="font-semibold text-primary">
+                  {formatYen(preview)}
+                </span>
+              </>
+            )}
           </div>
           <div className="flex gap-2">
             <Button variant="ghost" onClick={onClose}>
@@ -841,11 +890,25 @@ function BulkAddDialog({
                 onChange={(e) => setName(e.target.value)}
               />
             </div>
-            {isTournament || isOther ? (
+            {isTournament ? (
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-500">
+                  参加費
+                </label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={fee === 0 ? '' : fee}
+                  placeholder="0"
+                  onChange={(e) => setFee(num(e.target.value))}
+                  className="text-right tabular-nums"
+                />
+              </div>
+            ) : isOther ? (
               <>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-slate-500">
-                    {isTournament ? '参加費' : '金額'}
+                    金額
                   </label>
                   <Input
                     type="number"
@@ -933,7 +996,7 @@ function BulkAddDialog({
           </div>
           <p className="mt-2 text-xs text-slate-400">
             {isTournament
-              ? '1人あたり請求額 = 参加費 − 補助（0円未満は0円）'
+              ? '請求額 = 参加費 − 補助（0円未満は0円）。補助は下の参加者一覧で選手ごとに選べます'
               : isCamp
               ? '1人あたり費用 = 1泊単価 × 泊数'
               : '1人あたり請求額 = 金額 − 補助（0円未満は0円）。チームが一部負担する場合も対応できます'}
@@ -979,42 +1042,132 @@ function BulkAddDialog({
             </div>
           </div>
 
-          <div className="max-h-72 space-y-3 overflow-y-auto rounded-lg border border-slate-200 p-3">
-            {membersByGrade.map(({ grade, list }) => (
-              <div key={grade}>
-                <div className="mb-1 text-xs font-semibold text-slate-400">
-                  {grade}
+          {isTournament ? (
+            <div className="max-h-96 space-y-3 overflow-y-auto rounded-lg border border-slate-200 p-3">
+              {membersByGrade.map(({ grade, list }) => (
+                <div key={grade}>
+                  <div className="mb-1 text-xs font-semibold text-slate-400">
+                    {grade}
+                  </div>
+                  <div className="space-y-1">
+                    {list.map((m) => {
+                      const on = selected.has(m.id)
+                      const s = tournamentSubsidy[m.id] || {
+                        mode: 'half',
+                        custom: 0,
+                      }
+                      const subsidyAmount = tournamentSubsidyFor(m.id)
+                      const net = Math.max(0, num(fee) - subsidyAmount)
+                      return (
+                        <div
+                          key={m.id}
+                          className={cn(
+                            'flex flex-wrap items-center gap-2 rounded-md border px-2 py-1.5',
+                            on
+                              ? 'border-primary/30 bg-primary/5'
+                              : 'border-slate-200 bg-white'
+                          )}
+                        >
+                          <button
+                            onClick={() => toggle(m.id)}
+                            className="flex items-center gap-2 text-left"
+                          >
+                            <Checkbox checked={on} onChange={() => toggle(m.id)} />
+                            <span className="min-w-0">
+                              <span className="block w-28 truncate text-sm font-medium text-slate-800">
+                                {m.name}
+                              </span>
+                              <span className="block text-[11px] text-slate-400">
+                                {m.rank}
+                              </span>
+                            </span>
+                          </button>
+                          {on ? (
+                            <div className="ml-auto flex items-center gap-2">
+                              <Select
+                                value={s.mode}
+                                onChange={(e) =>
+                                  setTournamentSubsidyMode(m.id, e.target.value)
+                                }
+                                className="h-8 w-28 text-xs"
+                              >
+                                <option value="full">全額補助</option>
+                                <option value="half">半額補助</option>
+                                <option value="custom">その他補助</option>
+                              </Select>
+                              {s.mode === 'custom' ? (
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  value={s.custom === 0 ? '' : s.custom}
+                                  placeholder="補助額"
+                                  onChange={(e) =>
+                                    setTournamentSubsidyCustom(
+                                      m.id,
+                                      num(e.target.value)
+                                    )
+                                  }
+                                  className="h-8 w-24 text-right text-xs tabular-nums"
+                                />
+                              ) : (
+                                <span className="w-24 text-right text-xs tabular-nums text-slate-400">
+                                  −{formatYen(subsidyAmount)}
+                                </span>
+                              )}
+                              <span className="w-20 text-right text-xs font-semibold tabular-nums text-primary">
+                                {formatYen(net)}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="ml-auto text-xs text-slate-300">
+                              不参加
+                            </span>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-                  {list.map((m) => {
-                    const on = selected.has(m.id)
-                    return (
-                      <button
-                        key={m.id}
-                        onClick={() => toggle(m.id)}
-                        className={cn(
-                          'flex items-center gap-2 rounded-md border px-2 py-1.5 text-left text-sm transition-colors',
-                          on
-                            ? 'border-primary/30 bg-primary/5'
-                            : 'border-slate-200 bg-white hover:bg-slate-50'
-                        )}
-                      >
-                        <Checkbox checked={on} onChange={() => toggle(m.id)} />
-                        <span className="min-w-0">
-                          <span className="block truncate font-medium text-slate-800">
-                            {m.name}
+              ))}
+            </div>
+          ) : (
+            <div className="max-h-72 space-y-3 overflow-y-auto rounded-lg border border-slate-200 p-3">
+              {membersByGrade.map(({ grade, list }) => (
+                <div key={grade}>
+                  <div className="mb-1 text-xs font-semibold text-slate-400">
+                    {grade}
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                    {list.map((m) => {
+                      const on = selected.has(m.id)
+                      return (
+                        <button
+                          key={m.id}
+                          onClick={() => toggle(m.id)}
+                          className={cn(
+                            'flex items-center gap-2 rounded-md border px-2 py-1.5 text-left text-sm transition-colors',
+                            on
+                              ? 'border-primary/30 bg-primary/5'
+                              : 'border-slate-200 bg-white hover:bg-slate-50'
+                          )}
+                        >
+                          <Checkbox checked={on} onChange={() => toggle(m.id)} />
+                          <span className="min-w-0">
+                            <span className="block truncate font-medium text-slate-800">
+                              {m.name}
+                            </span>
+                            <span className="block text-[11px] text-slate-400">
+                              {m.rank}
+                            </span>
                           </span>
-                          <span className="block text-[11px] text-slate-400">
-                            {m.rank}
-                          </span>
-                        </span>
-                      </button>
-                    )
-                  })}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </Modal>
