@@ -71,6 +71,22 @@ var SHEETS = {
     name: 'config',
     headers: ['key', 'value'],
   },
+  dorm_transfers: {
+    // 寮間移動の「取り消し」用メタデータ。移動登録のたびに1件追加し、
+    // 取り消し実行時にその行を削除する（後日でも取り消せるようにするため、
+    // 画面のstateではなくシートに永続化する）。
+    // member_names/previous_members/created_logs は配列を JSON 文字列として保存する
+    name: 'dorm_transfers',
+    headers: [
+      'id',
+      'year_month',
+      'dorm',
+      'created_at',
+      'member_names_json',
+      'previous_members_json',
+      'created_logs_json',
+    ],
+  },
   users: {
     // ログインできる人のマスタ。PIN は平文では保存せず、
     // ソルト付きハッシュ（pin_hash）のみを保存します。
@@ -185,6 +201,12 @@ function handleRequest(e, method) {
         break;
       case 'saveConfig':
         data = saveConfig(params.config);
+        break;
+      case 'saveDormTransferRecord':
+        data = saveDormTransferRecord(params.year_month, params.record);
+        break;
+      case 'deleteDormTransferRecord':
+        data = deleteDormTransferRecord(params.id);
         break;
       case 'saveMealLogs':
         data = saveMealLogs(
@@ -676,6 +698,7 @@ function getInitialData(yearMonth) {
   var tournamentItems = readTournamentItems_(yearMonth);
   var campItems = readCampItems_(yearMonth);
   var otherItems = readOtherItems_(yearMonth);
+  var dormTransfers = readDormTransfers_(yearMonth);
   var result = {
     members: members,
     config: config,
@@ -685,6 +708,7 @@ function getInitialData(yearMonth) {
     tournamentItems: tournamentItems,
     campItems: campItems,
     otherItems: otherItems,
+    dormTransfers: dormTransfers,
   };
 
   try {
@@ -743,6 +767,71 @@ function saveConfig(config) {
   // 規定は全年月の取得結果に含まれるため、キャッシュ済みの全年月を破棄する
   invalidateAllInitialDataCache_();
   return { saved: rows.length };
+}
+
+// 寮間移動の「取り消し」用メタデータを1件追加する
+// record: { dorm, memberNames, previousMembers, createdLogs }
+function saveDormTransferRecord(yearMonth, record) {
+  ensureSheets_();
+  record = record || {};
+  var sheet = getSheet_(SHEETS.dorm_transfers.name);
+  var headers = SHEETS.dorm_transfers.headers;
+  var values = getBody_(sheet);
+  var id = Utilities.getUuid();
+  var createdAt = new Date().toISOString();
+  var newRow = [
+    id,
+    String(yearMonth || ''),
+    String(record.dorm || ''),
+    createdAt,
+    JSON.stringify(record.memberNames || []),
+    JSON.stringify(record.previousMembers || []),
+    JSON.stringify(record.createdLogs || []),
+  ];
+  var out = [];
+  for (var i = 0; i < values.length; i++) {
+    if (values[i][0] === '') continue;
+    out.push(values[i]);
+  }
+  out.push(newRow);
+  clearBody_(sheet);
+  sheet.getRange(2, 1, out.length, headers.length).setValues(out);
+  invalidateInitialDataCache_(yearMonth);
+  return {
+    id: id,
+    yearMonth: String(yearMonth || ''),
+    dorm: record.dorm || '',
+    createdAt: createdAt,
+    memberNames: record.memberNames || [],
+    previousMembers: record.previousMembers || [],
+    createdLogs: record.createdLogs || [],
+  };
+}
+
+// 寮間移動の「取り消し」用メタデータを1件削除する
+// （取り消し実行後、または「取り消さずにこの通知を消す」操作の両方から呼ばれる）
+function deleteDormTransferRecord(id) {
+  ensureSheets_();
+  var sheet = getSheet_(SHEETS.dorm_transfers.name);
+  var headers = SHEETS.dorm_transfers.headers;
+  var values = getBody_(sheet);
+  var kept = [];
+  var removedYearMonth = '';
+  for (var i = 0; i < values.length; i++) {
+    var row = values[i];
+    if (row[0] === '') continue;
+    if (String(row[0]) === String(id)) {
+      removedYearMonth = String(row[1] || '');
+      continue;
+    }
+    kept.push(row);
+  }
+  clearBody_(sheet);
+  if (kept.length) {
+    sheet.getRange(2, 1, kept.length, headers.length).setValues(kept);
+  }
+  if (removedYearMonth) invalidateInitialDataCache_(removedYearMonth);
+  return { ok: true };
 }
 
 // 食数ログ UPSERT（key: date + member_id + dorm）+ 見学高校生（当日×寮を総入れ替え）
@@ -1133,6 +1222,40 @@ function readOtherItems_(yearMonth) {
       name: String(r[2]),
       amount: num_(r[3]),
       subsidy: num_(r[4]),
+    });
+  }
+  return out;
+}
+
+// 指定年月の寮間移動「取り消し」用メタデータを読み込む
+function readDormTransfers_(yearMonth) {
+  var sheet = getSheet_(SHEETS.dorm_transfers.name);
+  var values = getBody_(sheet);
+  var out = [];
+  for (var i = 0; i < values.length; i++) {
+    var r = values[i];
+    if (r[0] === '') continue;
+    if (yearMonth && String(r[1]) !== yearMonth) continue;
+    var memberNames = [];
+    var previousMembers = [];
+    var createdLogs = [];
+    try {
+      memberNames = JSON.parse(r[4] || '[]');
+    } catch (e) {}
+    try {
+      previousMembers = JSON.parse(r[5] || '[]');
+    } catch (e) {}
+    try {
+      createdLogs = JSON.parse(r[6] || '[]');
+    } catch (e) {}
+    out.push({
+      id: String(r[0]),
+      yearMonth: String(r[1]),
+      dorm: String(r[2] || ''),
+      createdAt: String(r[3] || ''),
+      memberNames: memberNames,
+      previousMembers: previousMembers,
+      createdLogs: createdLogs,
     });
   }
   return out;

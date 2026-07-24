@@ -264,6 +264,43 @@ export async function saveExpenses(yearMonth, payload) {
   })
 }
 
+// 寮間移動の「取り消し」用メタデータを1件追加する
+// record: { dorm, memberNames, previousMembers, createdLogs }
+export async function saveDormTransferRecord(yearMonth, record) {
+  if (USE_DUMMY) {
+    await delay(120)
+    const saved = {
+      id: `dummy-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      yearMonth,
+      dorm: record.dorm || '',
+      createdAt: new Date().toISOString(),
+      memberNames: record.memberNames || [],
+      previousMembers: record.previousMembers || [],
+      createdLogs: record.createdLogs || [],
+    }
+    const store = dummyStore.loaded[yearMonth]
+    if (store) {
+      store.dormTransfers = [...(store.dormTransfers || []), saved]
+    }
+    return saved
+  }
+  return apiPost('saveDormTransferRecord', { year_month: yearMonth, record })
+}
+
+// 寮間移動の「取り消し」用メタデータを1件削除する
+// （取り消し実行後、または取り消さずに通知だけ消す操作の両方から呼ばれる）
+export async function deleteDormTransferRecord(id) {
+  if (USE_DUMMY) {
+    await delay(100)
+    for (const ym of Object.keys(dummyStore.loaded)) {
+      const store = dummyStore.loaded[ym]
+      store.dormTransfers = (store.dormTransfers || []).filter((r) => r.id !== id)
+    }
+    return { ok: true }
+  }
+  return apiPost('deleteDormTransferRecord', { id })
+}
+
 // タブを閉じる／リロードするなど、通常の fetch が完走を保証されない
 // タイミングでのベストエフォート自動保存用（応答は待たない・エラーも検知しない）。
 // sendBeacon は文字列を渡すと Content-Type: text/plain になるため、

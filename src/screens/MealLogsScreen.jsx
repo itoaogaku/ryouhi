@@ -64,9 +64,13 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
     members,
     mealLogs,
     guestMeals,
+    dormTransfers,
     loading,
     saveMealLogs,
     saveMembers,
+    registerDormTransfer,
+    undoDormTransfer,
+    dismissDormTransfer,
     showToast,
   } = useApp()
 
@@ -87,10 +91,8 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
   const [transferring, setTransferring] = useState(false)
   const [transferDay, setTransferDay] = useState(defaultDay)
   const [transferSelected, setTransferSelected] = useState(() => new Set())
-  // 直前に登録した寮間移動の取り消し用情報（このタブを離れる/リロードすると消える簡易的なもの）
-  // { dorm, memberNames, previousMembers: [{id, dorm, group}], createdLogs: [{date, member_id, dorm}] }
-  const [lastTransfer, setLastTransfer] = useState(null)
-  const [undoingTransfer, setUndoingTransfer] = useState(false)
+  // 取り消し・通知消去の処理中は、対象の移動登録行だけボタンを無効化する
+  const [processingTransferId, setProcessingTransferId] = useState(null)
   const mealListRef = useRef(null)
 
   // member_id -> { breakfast, dinner } の編集バッファ（当日×この寮）
@@ -353,8 +355,8 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
       if (transferLogs.length > 0) {
         await saveMealLogs(transferLogs, [], null, dorm, { silent: true })
       }
-      // この移動登録は、この画面を離れる/リロードするまでの間、下のバーから取り消せる
-      setLastTransfer({
+      // 取り消し用メタデータをシートへ永続化する（後日でもここから取り消せる）
+      await registerDormTransfer({
         dorm,
         memberNames,
         previousMembers,
@@ -375,44 +377,29 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
     }
   }
 
-  // 直前の寮間移動登録を取り消す:
-  // 対象選手の寮・集金グループを元に戻し、この移動で新規作成した食数ログを削除する
-  // （移動前から既にあった記録には一切触れない）
-  const undoDormTransfer = async () => {
-    if (!lastTransfer) return
-    setUndoingTransfer(true)
-    try {
-      const prevById = new Map(
-        lastTransfer.previousMembers.map((pm) => [pm.id, pm])
-      )
-      const revertedMembers = members.map((m) => {
-        const pm = prevById.get(m.id)
-        if (!pm) return m
-        return { ...m, dorm: pm.dorm, group: pm.group }
-      })
-      await saveMembers(revertedMembers)
+  // この寮宛ての、まだ取り消されていない移動登録一覧
+  const pendingTransfers = dormTransfers.filter((t) => t.dorm === dorm)
 
-      if (lastTransfer.createdLogs.length > 0) {
-        const deleteLogs = lastTransfer.createdLogs.map((l) => ({
-          date: l.date,
-          member_id: l.member_id,
-          dorm: l.dorm,
-          breakfast: false,
-          dinner: false,
-        }))
-        await saveMealLogs(deleteLogs, [], null, lastTransfer.dorm, {
-          silent: true,
-        })
-      }
-      showToast(
-        `${lastTransfer.memberNames.length}名の${lastTransfer.dorm}への移動登録を取り消しました`
-      )
-      setLastTransfer(null)
+  const handleUndoTransfer = async (record) => {
+    setProcessingTransferId(record.id)
+    try {
+      await undoDormTransfer(record)
+    } catch (e) {
+      // 失敗時のトーストは context 側で表示済み
+    } finally {
+      setProcessingTransferId(null)
+    }
+  }
+
+  const handleDismissTransfer = async (record) => {
+    setProcessingTransferId(record.id)
+    try {
+      await dismissDormTransfer(record)
     } catch (e) {
       console.error(e)
-      showToast('移動登録の取り消しに失敗しました', 'error')
+      showToast('通知の削除に失敗しました', 'error')
     } finally {
-      setUndoingTransfer(false)
+      setProcessingTransferId(null)
     }
   }
 
@@ -661,23 +648,44 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
         </div>
       </div>
 
-      {lastTransfer && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm">
-          <div className="text-amber-800">
-            <span className="font-semibold">
-              {lastTransfer.memberNames.join('、')}
-            </span>
-            を{lastTransfer.dorm}へ移動登録しました。間違えた場合はここから取り消せます。
-          </div>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={undoDormTransfer}
-            disabled={undoingTransfer}
-          >
-            <Undo2 className="h-4 w-4" />
-            {undoingTransfer ? '取り消し中...' : 'この移動登録を取り消す'}
-          </Button>
+      {pendingTransfers.length > 0 && (
+        <div className="space-y-2">
+          {pendingTransfers.map((t) => {
+            const processing = processingTransferId === t.id
+            return (
+              <div
+                key={t.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm"
+              >
+                <div className="text-amber-800">
+                  <span className="font-semibold">
+                    {t.memberNames.join('、')}
+                  </span>
+                  を{t.dorm}へ移動登録しました（{formatTransferTimestamp(t.createdAt)}）。
+                  間違えた場合はここから取り消せます。
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => handleDismissTransfer(t)}
+                    disabled={processing}
+                  >
+                    了解（通知を消す）
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => handleUndoTransfer(t)}
+                    disabled={processing}
+                  >
+                    <Undo2 className="h-4 w-4" />
+                    {processing ? '処理中...' : 'この移動登録を取り消す'}
+                  </Button>
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
 
@@ -1166,6 +1174,15 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
       </div>
     </div>
   )
+}
+
+// 寮間移動の登録日時（ISO文字列）を「7/24 15:03」のような短い表記にする
+function formatTransferTimestamp(iso) {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const hh = String(d.getHours()).padStart(2, '0')
+  const mm = String(d.getMinutes()).padStart(2, '0')
+  return `${d.getMonth() + 1}/${d.getDate()} ${hh}:${mm}`
 }
 
 function LoadingState() {

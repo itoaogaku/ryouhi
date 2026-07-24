@@ -311,6 +311,7 @@ export function buildDummyInitialData(year, month) {
     tournamentItems: generateTournamentItems(members, year, month),
     campItems: generateCampItems(members, year, month),
     otherItems: generateOtherItems(members, year, month),
+    dormTransfers: [],
   }
 }
 

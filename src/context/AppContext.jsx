@@ -33,6 +33,7 @@ export function AppProvider({ children, onAuthError }) {
   const [tournamentItems, setTournamentItems] = useState([])
   const [campItems, setCampItems] = useState([])
   const [otherItems, setOtherItems] = useState([])
+  const [dormTransfers, setDormTransfers] = useState([])
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -72,6 +73,7 @@ export function AppProvider({ children, onAuthError }) {
     setTournamentItems(data.tournamentItems || [])
     setCampItems(data.campItems || [])
     setOtherItems(data.otherItems || [])
+    setDormTransfers(data.dormTransfers || [])
   }, [])
 
   const reload = useCallback(async () => {
@@ -262,6 +264,141 @@ export function AppProvider({ children, onAuthError }) {
     ]
   )
 
+  // 寮間移動の登録直後に、取り消し用メタデータをシートへ永続化する
+  // （画面のstateではなくシートに保存するため、後日でも取り消せる）
+  // record: { dorm, memberNames, previousMembers, createdLogs }
+  const registerDormTransfer = useCallback(
+    async (record) => {
+      let saved
+      try {
+        saved = await api.saveDormTransferRecord(yearMonth, record)
+      } catch (e) {
+        checkAuthError(e)
+        throw e
+      }
+      setDormTransfers((prev) => [...prev, saved])
+      const entry = cacheRef.current[yearMonth]
+      if (entry) {
+        cacheRef.current[yearMonth] = {
+          ...entry,
+          dormTransfers: [...(entry.dormTransfers || []), saved],
+        }
+      }
+      return saved
+    },
+    [yearMonth, checkAuthError]
+  )
+
+  // 取り消さずに、この移動登録の通知だけを消す（登録内容が正しかった場合など）
+  const dismissDormTransfer = useCallback(
+    async (record) => {
+      try {
+        await api.deleteDormTransferRecord(record.id)
+      } catch (e) {
+        checkAuthError(e)
+        throw e
+      }
+      setDormTransfers((prev) => prev.filter((r) => r.id !== record.id))
+      for (const ym of Object.keys(cacheRef.current)) {
+        const entry = cacheRef.current[ym]
+        if (!entry) continue
+        cacheRef.current[ym] = {
+          ...entry,
+          dormTransfers: (entry.dormTransfers || []).filter(
+            (r) => r.id !== record.id
+          ),
+        }
+      }
+    },
+    [checkAuthError]
+  )
+
+  // 寮間移動を取り消す: 対象選手の寮・集金グループを元に戻し、
+  // この移動で新規作成した食数ログだけを削除する
+  // （移動前から存在した記録には一切触れない。日をまたいでも取り消せるよう
+  //   record はシートに永続化されたメタデータから渡される）
+  const undoDormTransfer = useCallback(
+    async (record) => {
+      try {
+        const prevById = new Map(
+          record.previousMembers.map((pm) => [pm.id, pm])
+        )
+        const revertedMembers = members.map((m) => {
+          const pm = prevById.get(m.id)
+          if (!pm) return m
+          return { ...m, dorm: pm.dorm, group: pm.group }
+        })
+        await api.saveMembers(revertedMembers)
+        setMembers(revertedMembers)
+        for (const ym of Object.keys(cacheRef.current)) {
+          cacheRef.current[ym] = {
+            ...cacheRef.current[ym],
+            members: revertedMembers,
+          }
+        }
+
+        if (record.createdLogs.length > 0) {
+          const deleteLogs = record.createdLogs.map((l) => ({
+            date: l.date,
+            member_id: l.member_id,
+            dorm: l.dorm,
+            breakfast: false,
+            dinner: false,
+          }))
+          await api.saveMealLogs(
+            record.yearMonth,
+            deleteLogs,
+            [],
+            null,
+            record.dorm
+          )
+          const key = (l) => `${l.date}__${l.member_id}__${l.dorm || ''}`
+          const deleteKeys = new Set(deleteLogs.map(key))
+          if (record.yearMonth === yearMonth) {
+            const nextMealLogs = mealLogs.filter((l) => !deleteKeys.has(key(l)))
+            setMealLogs(nextMealLogs)
+            const entry = cacheRef.current[yearMonth]
+            if (entry) {
+              cacheRef.current[yearMonth] = { ...entry, mealLogs: nextMealLogs }
+            }
+          } else {
+            const entry = cacheRef.current[record.yearMonth]
+            if (entry) {
+              cacheRef.current[record.yearMonth] = {
+                ...entry,
+                mealLogs: (entry.mealLogs || []).filter(
+                  (l) => !deleteKeys.has(key(l))
+                ),
+              }
+            }
+          }
+        }
+
+        await api.deleteDormTransferRecord(record.id)
+        setDormTransfers((prev) => prev.filter((r) => r.id !== record.id))
+        for (const ym of Object.keys(cacheRef.current)) {
+          const entry = cacheRef.current[ym]
+          if (!entry) continue
+          cacheRef.current[ym] = {
+            ...entry,
+            dormTransfers: (entry.dormTransfers || []).filter(
+              (r) => r.id !== record.id
+            ),
+          }
+        }
+        showToast(
+          `${record.memberNames.length}名の${record.dorm}への移動登録を取り消しました`
+        )
+      } catch (e) {
+        console.error(e)
+        checkAuthError(e)
+        showToast('移動登録の取り消しに失敗しました', 'error')
+        throw e
+      }
+    },
+    [members, mealLogs, yearMonth, showToast, checkAuthError]
+  )
+
   const value = {
     year,
     month,
@@ -276,6 +413,7 @@ export function AppProvider({ children, onAuthError }) {
     tournamentItems,
     campItems,
     otherItems,
+    dormTransfers,
     loading,
     error,
     toast,
@@ -285,6 +423,9 @@ export function AppProvider({ children, onAuthError }) {
     saveConfig,
     saveMealLogs,
     saveExpenses,
+    registerDormTransfer,
+    undoDormTransfer,
+    dismissDormTransfer,
     usingDummy: api.USE_DUMMY,
   }
 
