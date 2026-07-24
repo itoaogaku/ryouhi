@@ -1,7 +1,6 @@
 import React from 'react'
 import { formatYen, formatYearMonthJa } from '../lib/utils.js'
-import { MEAL_TRACKING_DORMS } from '../lib/constants.js'
-import { mealPriceFor, buildItemColumns, itemColumnValue } from '../lib/calc.js'
+import { buildItemColumns, itemColumnValue } from '../lib/calc.js'
 
 // -------------------------------------------------------------
 // 集金用A4シート（1グループ = 1ページ）
@@ -20,7 +19,7 @@ import { mealPriceFor, buildItemColumns, itemColumnValue } from '../lib/calc.js'
 const PAGE_WIDTH = 794 // A4 幅 (96dpi)
 const BORDER = '1px solid #000000'
 
-export default function CollectionSheet({ group, rows, year, month, config }) {
+export default function CollectionSheet({ group, rows, year, month }) {
   const totalSum = rows.reduce((a, r) => a + r.total, 0)
 
   // 大会・合宿・その他費用はその月に実際に使われた項目名がそのまま列見出しになる
@@ -59,33 +58,10 @@ export default function CollectionSheet({ group, rows, year, month, config }) {
           marginBottom: 6,
         }}
       >
-        <div>
-          <div style={{ fontSize: 12, color: '#000000', letterSpacing: 1 }}>
-            寮費・食費 集金一覧表
-          </div>
-          <div style={{ fontSize: 26, fontWeight: 700, marginTop: 2 }}>
-            {group}
-          </div>
+        <div style={{ fontSize: 26, fontWeight: 700 }}>{group}</div>
+        <div style={{ fontSize: 18, fontWeight: 700 }}>
+          {formatYearMonthJa(year, month)}分
         </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 18, fontWeight: 700 }}>
-            {formatYearMonthJa(year, month)}分
-          </div>
-          <div style={{ fontSize: 11, color: '#000000', marginTop: 2 }}>
-            対象人数: {rows.length}名
-          </div>
-        </div>
-      </div>
-
-      {/* 単価注記（食費は実際に食べた寮の単価。寮ごとに異なる場合がある） */}
-      <div style={{ fontSize: 10, color: '#000000', marginBottom: 10 }}>
-        部費 {formatYen(config.base_club_fee)}
-        {MEAL_TRACKING_DORMS.map((dorm) => (
-          <span key={dorm}>
-            ／{dorm}: 朝食 {formatYen(mealPriceFor(config, dorm, 'breakfast'))}
-            ・夕食 {formatYen(mealPriceFor(config, dorm, 'dinner'))}
-          </span>
-        ))}
       </div>
 
       {/* テーブル（大会・合宿・その他費用はその月に実際に使われた項目名がそのまま列見出しになる） */}
@@ -171,28 +147,6 @@ export default function CollectionSheet({ group, rows, year, month, config }) {
           </tr>
         </tfoot>
       </table>
-
-      {/* フッター（集金係記入欄） */}
-      <div
-        style={{
-          marginTop: 20,
-          display: 'flex',
-          justifyContent: 'space-between',
-          fontSize: 11,
-          color: '#000000',
-        }}
-      >
-        <div>
-          集金担当者: ______________________
-        </div>
-        <div>
-          集金完了日: ______ 年 ______ 月 ______ 日
-        </div>
-      </div>
-      <div style={{ marginTop: 10, fontSize: 9, color: '#000000' }}>
-        ※
-        大会・合宿・その他費用は今月実際に使われた項目名がそのまま列になっています。「○○補助」はチームが負担した補助額（赤字マイナス表示）です。治療費補助・モチベーション費補助も同様に赤字マイナス表示です。領収欄は集金確認用のチェック欄です。
-      </div>
     </div>
   )
 }
