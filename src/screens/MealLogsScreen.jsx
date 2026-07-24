@@ -15,6 +15,7 @@ import {
   Printer,
   Loader2,
   ArrowRightLeft,
+  Undo2,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import * as api from '../lib/api.js'
@@ -86,6 +87,10 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
   const [transferring, setTransferring] = useState(false)
   const [transferDay, setTransferDay] = useState(defaultDay)
   const [transferSelected, setTransferSelected] = useState(() => new Set())
+  // 直前に登録した寮間移動の取り消し用情報（このタブを離れる/リロードすると消える簡易的なもの）
+  // { dorm, memberNames, previousMembers: [{id, dorm, group}], createdLogs: [{date, member_id, dorm}] }
+  const [lastTransfer, setLastTransfer] = useState(null)
+  const [undoingTransfer, setUndoingTransfer] = useState(false)
   const mealListRef = useRef(null)
 
   // member_id -> { breakfast, dinner } の編集バッファ（当日×この寮）
@@ -313,6 +318,14 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
     setTransferring(true)
     try {
       const selectedIds = new Set(transferSelected)
+      // 取り消し用に、変更前の寮・集金グループを控えておく
+      const previousMembers = members
+        .filter((m) => selectedIds.has(m.id))
+        .map((m) => ({ id: m.id, dorm: m.dorm, group: m.group }))
+      const memberNames = previousMembers
+        .map((pm) => members.find((m) => m.id === pm.id)?.name)
+        .filter(Boolean)
+
       const updatedMembers = members.map((m) => {
         if (!selectedIds.has(m.id)) return m
         // 対応する集金グループが無い寮（1寮）への移動時は、古いグループを
@@ -340,6 +353,17 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
       if (transferLogs.length > 0) {
         await saveMealLogs(transferLogs, [], null, dorm, { silent: true })
       }
+      // この移動登録は、この画面を離れる/リロードするまでの間、下のバーから取り消せる
+      setLastTransfer({
+        dorm,
+        memberNames,
+        previousMembers,
+        createdLogs: transferLogs.map((l) => ({
+          date: l.date,
+          member_id: l.member_id,
+          dorm: l.dorm,
+        })),
+      })
       showToast(`${selectedIds.size}名を${dorm}へ移動登録しました`)
       setShowTransferDialog(false)
       setTransferSelected(new Set())
@@ -348,6 +372,47 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
       showToast('寮間移動の登録に失敗しました', 'error')
     } finally {
       setTransferring(false)
+    }
+  }
+
+  // 直前の寮間移動登録を取り消す:
+  // 対象選手の寮・集金グループを元に戻し、この移動で新規作成した食数ログを削除する
+  // （移動前から既にあった記録には一切触れない）
+  const undoDormTransfer = async () => {
+    if (!lastTransfer) return
+    setUndoingTransfer(true)
+    try {
+      const prevById = new Map(
+        lastTransfer.previousMembers.map((pm) => [pm.id, pm])
+      )
+      const revertedMembers = members.map((m) => {
+        const pm = prevById.get(m.id)
+        if (!pm) return m
+        return { ...m, dorm: pm.dorm, group: pm.group }
+      })
+      await saveMembers(revertedMembers)
+
+      if (lastTransfer.createdLogs.length > 0) {
+        const deleteLogs = lastTransfer.createdLogs.map((l) => ({
+          date: l.date,
+          member_id: l.member_id,
+          dorm: l.dorm,
+          breakfast: false,
+          dinner: false,
+        }))
+        await saveMealLogs(deleteLogs, [], null, lastTransfer.dorm, {
+          silent: true,
+        })
+      }
+      showToast(
+        `${lastTransfer.memberNames.length}名の${lastTransfer.dorm}への移動登録を取り消しました`
+      )
+      setLastTransfer(null)
+    } catch (e) {
+      console.error(e)
+      showToast('移動登録の取り消しに失敗しました', 'error')
+    } finally {
+      setUndoingTransfer(false)
     }
   }
 
@@ -595,6 +660,26 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
           )}
         </div>
       </div>
+
+      {lastTransfer && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm">
+          <div className="text-amber-800">
+            <span className="font-semibold">
+              {lastTransfer.memberNames.join('、')}
+            </span>
+            を{lastTransfer.dorm}へ移動登録しました。間違えた場合はここから取り消せます。
+          </div>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={undoDormTransfer}
+            disabled={undoingTransfer}
+          >
+            <Undo2 className="h-4 w-4" />
+            {undoingTransfer ? '取り消し中...' : 'この移動登録を取り消す'}
+          </Button>
+        </div>
+      )}
 
       {showTransferDialog && (
         <Modal
