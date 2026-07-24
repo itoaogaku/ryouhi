@@ -732,11 +732,12 @@ function BulkAddDialog({
       ? num(fee)
       : num(customSubsidy)
 
-  // 大会の補助: 参加者ごとに「全額補助／半額補助／その他補助」を個別に選ぶ
-  // memberId -> { mode: 'full' | 'half' | 'custom', custom: number }
+  // 大会の補助: 参加者ごとに「全額自己負担／半額補助／全額補助／その他補助」を個別に選ぶ
+  // memberId -> { mode: 'none' | 'half' | 'full' | 'custom', custom: number }
   const [tournamentSubsidy, setTournamentSubsidy] = useState({})
   const tournamentSubsidyFor = (memberId) => {
     const s = tournamentSubsidy[memberId] || { mode: 'half', custom: 0 }
+    if (s.mode === 'none') return 0
     if (s.mode === 'full') return num(fee)
     if (s.mode === 'half') return Math.round(num(fee) / 2)
     return num(s.custom)
@@ -1107,8 +1108,9 @@ function BulkAddDialog({
                                 }
                                 className="h-8 w-28 text-xs"
                               >
-                                <option value="full">全額補助</option>
+                                <option value="none">全額自己負担</option>
                                 <option value="half">半額補助</option>
+                                <option value="full">全額補助</option>
                                 <option value="custom">その他補助</option>
                               </Select>
                               {s.mode === 'custom' ? (
