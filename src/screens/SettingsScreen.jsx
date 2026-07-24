@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Save, RotateCcw, ClipboardList, Coins } from 'lucide-react'
+import { Save, X, Pencil, ClipboardList, Coins } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import {
   Button,
@@ -10,16 +10,19 @@ import {
   Skeleton,
 } from '../components/ui/index.jsx'
 import { MEAL_TRACKING_DORMS } from '../lib/constants.js'
-import { num } from '../lib/utils.js'
+import { num, formatYen } from '../lib/utils.js'
 import { mealPriceFor } from '../lib/calc.js'
 
 // 画面：規定（食費単価・部費と、寮費清算の細かいルールのメモ）
-// 食費単価は1寮・2寮でそれぞれ別に設定できる
+// 食費単価は1寮・2寮でそれぞれ別に設定できる。
+// 誤って書き換えてしまわないよう、通常は読み取り専用で表示し、
+// 「編集」ボタンを押したときだけ入力できるようにする。
 export default function SettingsScreen() {
   const { config, loading, saveConfig } = useApp()
   const [form, setForm] = useState(() => buildForm(config))
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
+  const [editing, setEditing] = useState(false)
 
   useEffect(() => {
     setForm(buildForm(config))
@@ -42,9 +45,16 @@ export default function SettingsScreen() {
     setDirty(true)
   }
 
-  const reset = () => {
+  const startEditing = () => {
     setForm(buildForm(config))
     setDirty(false)
+    setEditing(true)
+  }
+
+  const cancelEditing = () => {
+    setForm(buildForm(config))
+    setDirty(false)
+    setEditing(false)
   }
 
   const handleSave = async () => {
@@ -60,6 +70,7 @@ export default function SettingsScreen() {
       }
       await saveConfig(payload)
       setDirty(false)
+      setEditing(false)
     } finally {
       setSaving(false)
     }
@@ -74,16 +85,23 @@ export default function SettingsScreen() {
           食費の単価や部費、寮費清算に関する細かいルールをここにまとめて管理します。
         </p>
         <div className="flex items-center gap-2">
-          {dirty && (
-            <Button variant="ghost" onClick={reset}>
-              <RotateCcw className="h-4 w-4" />
-              取消
+          {editing ? (
+            <>
+              <Button variant="ghost" onClick={cancelEditing} disabled={saving}>
+                <X className="h-4 w-4" />
+                キャンセル
+              </Button>
+              <Button onClick={handleSave} disabled={saving || !dirty}>
+                <Save className="h-4 w-4" />
+                {saving ? '保存中...' : '保存'}
+              </Button>
+            </>
+          ) : (
+            <Button onClick={startEditing}>
+              <Pencil className="h-4 w-4" />
+              編集
             </Button>
           )}
-          <Button onClick={handleSave} disabled={saving || !dirty}>
-            <Save className="h-4 w-4" />
-            {saving ? '保存中...' : '保存'}
-          </Button>
         </div>
       </div>
 
@@ -110,47 +128,65 @@ export default function SettingsScreen() {
                   <td className="py-1.5 pr-3 text-xs font-medium text-slate-500">
                     朝食単価（1食あたり）
                   </td>
-                  {MEAL_TRACKING_DORMS.map((dorm) => (
-                    <td key={dorm} className="px-2 py-1.5">
-                      <Input
-                        type="number"
-                        min={0}
-                        value={
-                          form.prices[dorm]?.breakfast === 0
-                            ? ''
-                            : form.prices[dorm]?.breakfast
-                        }
-                        placeholder="0"
-                        onChange={(e) =>
-                          updatePrice(dorm, 'breakfast', num(e.target.value))
-                        }
-                        className="text-right tabular-nums"
-                      />
-                    </td>
-                  ))}
+                  {MEAL_TRACKING_DORMS.map((dorm) =>
+                    editing ? (
+                      <td key={dorm} className="px-2 py-1.5">
+                        <Input
+                          type="number"
+                          min={0}
+                          value={
+                            form.prices[dorm]?.breakfast === 0
+                              ? ''
+                              : form.prices[dorm]?.breakfast
+                          }
+                          placeholder="0"
+                          onChange={(e) =>
+                            updatePrice(dorm, 'breakfast', num(e.target.value))
+                          }
+                          className="text-right tabular-nums"
+                        />
+                      </td>
+                    ) : (
+                      <td
+                        key={dorm}
+                        className="px-2 py-1.5 text-right tabular-nums text-slate-800"
+                      >
+                        {formatYen(form.prices[dorm]?.breakfast)}
+                      </td>
+                    )
+                  )}
                 </tr>
                 <tr>
                   <td className="py-1.5 pr-3 text-xs font-medium text-slate-500">
                     夕食単価（1食あたり）
                   </td>
-                  {MEAL_TRACKING_DORMS.map((dorm) => (
-                    <td key={dorm} className="px-2 py-1.5">
-                      <Input
-                        type="number"
-                        min={0}
-                        value={
-                          form.prices[dorm]?.dinner === 0
-                            ? ''
-                            : form.prices[dorm]?.dinner
-                        }
-                        placeholder="0"
-                        onChange={(e) =>
-                          updatePrice(dorm, 'dinner', num(e.target.value))
-                        }
-                        className="text-right tabular-nums"
-                      />
-                    </td>
-                  ))}
+                  {MEAL_TRACKING_DORMS.map((dorm) =>
+                    editing ? (
+                      <td key={dorm} className="px-2 py-1.5">
+                        <Input
+                          type="number"
+                          min={0}
+                          value={
+                            form.prices[dorm]?.dinner === 0
+                              ? ''
+                              : form.prices[dorm]?.dinner
+                          }
+                          placeholder="0"
+                          onChange={(e) =>
+                            updatePrice(dorm, 'dinner', num(e.target.value))
+                          }
+                          className="text-right tabular-nums"
+                        />
+                      </td>
+                    ) : (
+                      <td
+                        key={dorm}
+                        className="px-2 py-1.5 text-right tabular-nums text-slate-800"
+                      >
+                        {formatYen(form.prices[dorm]?.dinner)}
+                      </td>
+                    )
+                  )}
                 </tr>
               </tbody>
             </table>
@@ -159,14 +195,20 @@ export default function SettingsScreen() {
             <label className="mb-1 block text-xs font-medium text-slate-500">
               部費（月額・一律）
             </label>
-            <Input
-              type="number"
-              min={0}
-              value={form.base_club_fee === 0 ? '' : form.base_club_fee}
-              placeholder="0"
-              onChange={(e) => update('base_club_fee', num(e.target.value))}
-              className="text-right tabular-nums"
-            />
+            {editing ? (
+              <Input
+                type="number"
+                min={0}
+                value={form.base_club_fee === 0 ? '' : form.base_club_fee}
+                placeholder="0"
+                onChange={(e) => update('base_club_fee', num(e.target.value))}
+                className="text-right tabular-nums"
+              />
+            ) : (
+              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-right text-sm tabular-nums text-slate-800">
+                {formatYen(form.base_club_fee)}
+              </div>
+            )}
           </div>
           <p className="text-xs text-slate-400">
             食費は「実際に食事をとった寮」の単価で計算されます（寮間移動でもう一方の寮で食べた日はその寮の単価が使われます）。清算画面・集金用PDFに反映されます。
@@ -183,12 +225,24 @@ export default function SettingsScreen() {
           <p className="text-xs text-slate-400">
             細かい取り決めや例外対応などを自由に書き留めておけます（表示のみで、金額の自動計算には使われません）。
           </p>
-          <Textarea
-            value={form.notes}
-            onChange={(e) => update('notes', e.target.value)}
-            rows={14}
-            placeholder="例）退寮月は日割り計算とする／大会不参加でも一律負担／体調不良による欠食は申告制 など"
-          />
+          {editing ? (
+            <Textarea
+              value={form.notes}
+              onChange={(e) => update('notes', e.target.value)}
+              rows={14}
+              placeholder="例）退寮月は日割り計算とする／大会不参加でも一律負担／体調不良による欠食は申告制 など"
+            />
+          ) : (
+            <div className="min-h-[10rem] whitespace-pre-wrap rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+              {form.notes ? (
+                form.notes
+              ) : (
+                <span className="text-slate-400">
+                  まだメモがありません。「編集」から記入できます。
+                </span>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
