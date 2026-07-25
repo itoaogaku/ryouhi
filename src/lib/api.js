@@ -301,6 +301,30 @@ export async function deleteDormTransferRecord(id) {
   return apiPost('deleteDormTransferRecord', { id })
 }
 
+// 寮間移動の「取り消し」用メタデータのうち、対象者一覧だけを書き換える
+// （複数人まとめて登録した移動から、特定の1人だけを取り消して除外する場合に使う）
+export async function updateDormTransferRecord(id, record) {
+  if (USE_DUMMY) {
+    await delay(120)
+    let updated = null
+    for (const ym of Object.keys(dummyStore.loaded)) {
+      const store = dummyStore.loaded[ym]
+      store.dormTransfers = (store.dormTransfers || []).map((r) => {
+        if (r.id !== id) return r
+        updated = {
+          ...r,
+          memberNames: record.memberNames || [],
+          previousMembers: record.previousMembers || [],
+          createdLogs: record.createdLogs || [],
+        }
+        return updated
+      })
+    }
+    return updated
+  }
+  return apiPost('updateDormTransferRecord', { id, record })
+}
+
 // タブを閉じる／リロードするなど、通常の fetch が完走を保証されない
 // タイミングでのベストエフォート自動保存用（応答は待たない・エラーも検知しない）。
 // sendBeacon は文字列を渡すと Content-Type: text/plain になるため、

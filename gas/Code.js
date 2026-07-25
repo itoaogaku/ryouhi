@@ -208,6 +208,9 @@ function handleRequest(e, method) {
       case 'deleteDormTransferRecord':
         data = deleteDormTransferRecord(params.id);
         break;
+      case 'updateDormTransferRecord':
+        data = updateDormTransferRecord(params.id, params.record);
+        break;
       case 'saveMealLogs':
         data = saveMealLogs(
           params.year_month,
@@ -832,6 +835,52 @@ function deleteDormTransferRecord(id) {
   }
   if (removedYearMonth) invalidateInitialDataCache_(removedYearMonth);
   return { ok: true };
+}
+
+// 寮間移動の「取り消し」用メタデータのうち、1件を書き換える
+// （複数人まとめて登録した移動から、特定の1人だけを取り消して除外する場合に使う。
+//   id・year_month・dorm・created_at は変更せず、対象者一覧の3項目だけ上書きする）
+function updateDormTransferRecord(id, record) {
+  ensureSheets_();
+  record = record || {};
+  var sheet = getSheet_(SHEETS.dorm_transfers.name);
+  var headers = SHEETS.dorm_transfers.headers;
+  var values = getBody_(sheet);
+  var out = [];
+  var updated = null;
+  for (var i = 0; i < values.length; i++) {
+    var row = values[i];
+    if (row[0] === '') continue;
+    if (String(row[0]) === String(id)) {
+      var newRow = [
+        row[0],
+        row[1],
+        row[2],
+        row[3],
+        JSON.stringify(record.memberNames || []),
+        JSON.stringify(record.previousMembers || []),
+        JSON.stringify(record.createdLogs || []),
+      ];
+      out.push(newRow);
+      updated = {
+        id: String(row[0]),
+        yearMonth: String(row[1]),
+        dorm: String(row[2] || ''),
+        createdAt: String(row[3] || ''),
+        memberNames: record.memberNames || [],
+        previousMembers: record.previousMembers || [],
+        createdLogs: record.createdLogs || [],
+      };
+      continue;
+    }
+    out.push(row);
+  }
+  clearBody_(sheet);
+  if (out.length) {
+    sheet.getRange(2, 1, out.length, headers.length).setValues(out);
+  }
+  if (updated) invalidateInitialDataCache_(updated.yearMonth);
+  return updated;
 }
 
 // 食数ログ UPSERT（key: date + member_id + dorm）+ 見学高校生（当日×寮を総入れ替え）

@@ -71,6 +71,7 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
     registerDormTransfer,
     undoDormTransfer,
     dismissDormTransfer,
+    removeDormTransferMember,
     showToast,
   } = useApp()
 
@@ -93,6 +94,8 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
   const [transferSelected, setTransferSelected] = useState(() => new Set())
   // 取り消し・通知消去の処理中は、対象の移動登録行だけボタンを無効化する
   const [processingTransferId, setProcessingTransferId] = useState(null)
+  // 個別の対象者だけを取り消す処理中は `${移動登録id}__${選手id}` で管理する
+  const [processingMemberKey, setProcessingMemberKey] = useState(null)
   const mealListRef = useRef(null)
 
   // member_id -> { breakfast, dinner } の編集バッファ（当日×この寮）
@@ -403,6 +406,19 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
     }
   }
 
+  // 複数人まとめた移動登録から、選んだ1人だけを取り消して除外する
+  const handleRemoveMember = async (record, memberId) => {
+    const key = `${record.id}__${memberId}`
+    setProcessingMemberKey(key)
+    try {
+      await removeDormTransferMember(record, memberId)
+    } catch (e) {
+      // 失敗時のトーストは context 側で表示済み
+    } finally {
+      setProcessingMemberKey(null)
+    }
+  }
+
   const getVal = (id) =>
     draft[String(id)] || { breakfast: false, dinner: false }
 
@@ -655,16 +671,37 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
             return (
               <div
                 key={t.id}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm"
+                className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm"
               >
                 <div className="text-amber-800">
-                  <span className="font-semibold">
-                    {t.memberNames.join('、')}
-                  </span>
-                  を{t.dorm}へ移動登録しました（{formatTransferTimestamp(t.createdAt)}）。
-                  間違えた場合はここから取り消せます。
+                  {t.dorm}への移動登録（{formatTransferTimestamp(t.createdAt)}）。
+                  誤って含めてしまった選手がいれば、名前の×から個別に取り消せます。
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap gap-1.5">
+                  {t.memberNames.map((name, i) => {
+                    const pm = t.previousMembers[i]
+                    const memberKey = `${t.id}__${pm?.id}`
+                    const memberProcessing = processingMemberKey === memberKey
+                    return (
+                      <span
+                        key={pm?.id ?? i}
+                        className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-white py-1 pl-2.5 pr-1.5 text-xs text-amber-800"
+                      >
+                        {name}
+                        <button
+                          onClick={() => pm && handleRemoveMember(t, pm.id)}
+                          disabled={memberProcessing || processing || !pm}
+                          title={`${name}さんだけ取り消す`}
+                          aria-label={`${name}さんだけ取り消す`}
+                          className="flex h-4 w-4 items-center justify-center rounded-full text-amber-500 hover:bg-amber-100 hover:text-amber-700 disabled:opacity-40"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    )
+                  })}
+                </div>
+                <div className="flex items-center justify-end gap-2">
                   <Button
                     size="sm"
                     variant="ghost"
@@ -680,7 +717,7 @@ export default function MealLogsScreen({ dorm, guestCategories = GUEST_CATEGORIE
                     disabled={processing}
                   >
                     <Undo2 className="h-4 w-4" />
-                    {processing ? '処理中...' : 'この移動登録を取り消す'}
+                    {processing ? '処理中...' : '全員まとめて取り消す'}
                   </Button>
                 </div>
               </div>
